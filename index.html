@@ -126,7 +126,8 @@
     .day-quick { display: flex; gap: 8px; margin-top: 8px; }
     .day-quick-btn { flex: 1; border: 1px solid #e3f3e3; background: #fff; color: var(--green-d); border-radius: 10px; padding: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
     .manage-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-    .manage-item { display: flex; flex-direction: column; gap: 6px; background: #f6fbf6; border-radius: 12px; padding: 10px 12px; }
+    .manage-item { display: flex; align-items: center; gap: 10px; background: #f6fbf6; border-radius: 12px; padding: 10px 12px; }
+    .manage-item.task-item { flex-direction: column; align-items: stretch; gap: 6px; }
     .manage-item .mi-top { display: flex; align-items: center; gap: 10px; }
     .manage-item .mi-emoji { font-size: 22px; flex-shrink: 0; }
     .manage-item .mi-name { flex: 1; min-width: 0; font-weight: 700; font-size: 13px; line-height: 1.35; word-break: break-word; }
@@ -792,7 +793,7 @@ function showBloom(species) {
     function renderTaskManage() {
       const s=store(); const box=$("taskManageList"); box.innerHTML="";
       s.tasks.slice().sort((a,b)=>(a.sort_order-b.sort_order)||(String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0))).forEach(t=>{
-        const it=document.createElement("div"); it.className="manage-item";
+        const it=document.createElement("div"); it.className="manage-item task-item";
         it.innerHTML='<div class="mi-top"><span class="mi-emoji">'+(t.emoji||"⭐")+'</span><span class="mi-name">'+esc(t.name)+'<small>· '+esc(catName(t.category_id))+'</small></span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
         it.querySelector(".mi-btn").addEventListener("click",()=>openTaskModal(t));
         it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除"); refresh(); } });
