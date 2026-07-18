@@ -770,7 +770,7 @@ function showBloom(species) {
     function openCatModal(cat) {
       cat=cat||{}; const overlay=document.createElement("div");
       overlay.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;display:flex;align-items:flex-end;justify-content:center;";
-      overlay.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;"><div style="font-weight:800;font-size:17px;margin-bottom:12px;">'+(cat.id?"编辑科目":"添加科目（大类）")+'</div>'+
+      overlay.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;"><div style="font-weight:800;font-size:17px;margin-bottom:12px;">'+(cat.id?"编辑科目":"添加科目（大类）")+'</div>'+
         '<label class="field">科目名称<input id="cmName" type="text" value="'+esc(cat.name||"")+'" placeholder="如：数学"></label>'+
         '<label class="field">图标（点选或输入）<input id="cmEmoji" type="text" value="'+esc(cat.emoji||"⭐")+'" maxlength="4"></label>'+
         '<div id="cmIcons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">'+PRESET_ICONS.map(function(e){return '<button type="button" class="ic-btn '+(e===(cat.emoji||"⭐")?"active":"")+'" data-e="'+e+'">'+e+'</button>';}).join("")+'</div>'+
@@ -814,7 +814,7 @@ function showBloom(species) {
       const catEmoji=function(id){const c=CATEGORIES.find(function(x){return x.id===id;});return c?c.emoji:"⭐";};
       let currentEmoji=task.emoji||catEmoji(initCatId);
       overlay.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;display:flex;align-items:flex-end;justify-content:center;";
-      overlay.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;"><div style="font-weight:800;font-size:17px;margin-bottom:12px;">'+(task.id?"编辑任务":"添加任务")+'</div>'+
+      overlay.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;"><div style="font-weight:800;font-size:17px;margin-bottom:12px;">'+(task.id?"编辑任务":"添加任务")+'</div>'+
         '<label class="field">任务名称<input id="tmName" type="text" value="'+esc(task.name||"")+'" placeholder="如：数学"></label>'+
         '<label class="field">图标（点选，默认与科目一致）<input id="tmEmoji" type="text" value="'+esc(currentEmoji)+'" maxlength="4" style="text-align:center;font-size:18px;"></label>'+
         '<div id="tmIcons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">'+PRESET_ICONS.map(function(e){return '<button type="button" class="ic-btn '+(e===currentEmoji?"active":"")+'" data-e="'+e+'">'+e+'</button>';}).join("")+'</div>'+
