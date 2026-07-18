@@ -553,6 +553,15 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
     function snapshot(s) { return JSON.parse(JSON.stringify({ categories:s.categories, tasks:s.tasks, checkins:s.checkins, redemptions:s.redemptions, settings:{ id:"settings", child_name:s.child_name, mom_pin:s.mom_pin, flowers_per_redemption:s.flowers_per_redemption, points_per_redemption:s.points_per_redemption } })); }
     function bootstrapLocal() { const s = defaultStore(); recomputeGrowth(s); return s; }
+    function supaErrText(r){ if(!r||!r.error) return ""; const e=r.error; return [e.code,e.message,e.details,e.hint].filter(Boolean).join(" | "); }
+    function errText(e){
+      if(e&&e.error) return supaErrText({error:e.error});
+      if(e&&(e.code||e.message)) return [e.code,e.message,e.details,e.hint].filter(Boolean).join(" | ");
+      const m=(e&&e.message)?e.message:String(e);
+      if(/failed to fetch|networkerror|timeout|abort/i.test(m)) return m+"（← 看起来是网络连不上 supabase.co）";
+      if(/permission|rls|denied|42501|pgrst/i.test(m)) return m+"（← 看起来是权限/RLS 策略问题）";
+      return m;
+    }
     async function loadAll() {
       if (!sb) { MEM = bootstrapLocal(); return; }
       updateCloudStatus("connecting");
@@ -564,7 +573,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         ]);
         const c = (cats.data)||[], t = (tasks.data)||[], ck = (checkins.data)||[], rd = (redemptions.data)||[], st = (settings.data)||[];
         const anyErr = [cats,tasks,checkins,redemptions,settings].some(r => r.error);
-        if (anyErr) { const detail = [cats,tasks,checkins,redemptions,settings].map(r=>r.error&&r.error.message).filter(Boolean).join("；"); throw new Error("云端返回错误：" + detail); }
+        if (anyErr) { const detail = [cats,tasks,checkins,redemptions,settings].map(supaErrText).filter(Boolean).join("；"); throw new Error("云端返回错误：" + detail); }
         let s;
         if (c.length === 0) {
           s = defaultStore();
@@ -583,7 +592,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         console.error("loadAll failed", e);
         MEM = bootstrapLocal();
         updateCloudStatus("error");
-        const msg = (e && e.message) ? e.message : String(e);
+        const msg = errText(e);
         const tip = $("cloudStatusTip");
         if (tip) tip.textContent = "同步失败原因：" + msg + "（可点上方「重试连接」）";
         toast("⚠️ 云端同步失败，已用本地数据");
