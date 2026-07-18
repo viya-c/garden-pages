@@ -329,8 +329,8 @@
     const KEY = "growth_garden_v1";
     // ===== Supabase 云端配置（多人实时）=====
     // 👇 把下面的两个值换成你自己的 Supabase 项目信息（详见同目录「部署步骤.md」）
-    const SUPABASE_URL = "";
-    const SUPABASE_ANON_KEY = "";
+    const SUPABASE_URL = "https://crsuctkvtbpbprpphyel.supabase.com";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyc3VjdGt2dGJwYnBycHBoeWVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNTUzMjEsImV4cCI6MjA5OTkzMTMyMX0.v2m41m-VQcfMNO-YFIJEvhJrPGj5-T5NJf6eZVYp8Bs";
     // 配置优先读浏览器本地（首次配置弹窗写入），其次才是源码里的常量
     function readConfig() { try { const c = JSON.parse(localStorage.getItem("gg_config") || "{}"); return { url: (c.url || SUPABASE_URL || "").trim(), key: (c.key || SUPABASE_ANON_KEY || "").trim() }; } catch (e) { return { url: "", key: "" }; } }
     const _cfg = readConfig();
