@@ -257,6 +257,8 @@
           <div class="card-title">📱 云端同步状态 <span id="cloudStatus" style="font-size:13px;font-weight:600;padding:2px 8px;border-radius:999px;background:#fde9d0;color:#b08968;vertical-align:middle;">正在连接…</span></div>
           <p class="muted">本版本数据保存在 Supabase 云端，全家共享、自动同步。换手机或给爸爸用，直接打开同一个网址即可，无需导出导入（下方「导出备份」可作额外保险）。<br><span id="cloudStatusTip" style="color:#b08968;">请稍候，正在检测云端连接…</span></p>
           <button id="btnCloudRetry" class="btn-ghost" style="margin-top:8px;">🔄 重试连接</button>
+          <button id="btnReconfigure" class="btn-ghost" style="margin-top:8px;">⚙️ 重新配置后端</button>
+          <p class="muted" style="margin-top:8px;font-size:12px;line-height:1.5;">若手机提示「云端同步失败」，多半是网络无法直连 supabase.co。可改用代理地址：点「重新配置后端」，把 <b>Project URL</b> 换成代理域名（如 <code>https://你的代理域名</code>），<b>Key 不变</b>。</p>
         </div>
         <div class="card">
           <div class="card-title">🗂️ 科目管理（大类）</div>
@@ -956,7 +958,12 @@ function showBloom(species) {
         loadAll().then(()=>refresh()).catch(()=>{});
       }, 20000);
     }
-    function showConfigHint() { const m = $("setupModal"); if (m) m.classList.remove("hidden"); }
+    function showConfigHint() {
+      // 预填当前配置，方便只改地址
+      if ($("setupUrl")) $("setupUrl").value = _cfg.url || "";
+      if ($("setupKey")) $("setupKey").value = _cfg.key || "";
+      const m = $("setupModal"); if (m) m.classList.remove("hidden");
+    }
     $("setupSave").addEventListener("click", ()=>{ const u = $("setupUrl").value.trim(), k = $("setupKey").value.trim(); if (!u || !k) { $("setupErr").textContent = "两项都要填哦～"; $("setupErr").classList.remove("hidden"); return; } localStorage.setItem("gg_config", JSON.stringify({ url:u, key:k })); location.reload(); });
     bind();
     const btnCloudRetry = $("btnCloudRetry");
@@ -966,6 +973,12 @@ function showBloom(species) {
       toast("正在重新连接云端…");
       try { await loadAll(); refresh(); startSyncPoll(); }
       catch (e) { /* 状态已由 loadAll 内部设置 */ }
+    });
+    const btnReconfigure = $("btnReconfigure");
+    if (btnReconfigure) btnReconfigure.addEventListener("click", ()=>{
+      // 打开配置弹窗并预填现有地址/Key，用户只需把 Project URL 改成代理域名
+      showConfigHint();
+      toast("把 Project URL 改成代理地址，Key 保持不变后保存");
     });
     if (cloudReady) {
       updateCloudStatus("connecting");
