@@ -126,10 +126,13 @@
     .day-quick { display: flex; gap: 8px; margin-top: 8px; }
     .day-quick-btn { flex: 1; border: 1px solid #e3f3e3; background: #fff; color: var(--green-d); border-radius: 10px; padding: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
     .manage-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-    .manage-item { display: flex; align-items: center; gap: 10px; background: #f6fbf6; border-radius: 12px; padding: 10px 12px; }
-    .manage-item .mi-emoji { font-size: 24px; }
-    .manage-item .mi-name { flex: 1; font-weight: 700; }
-    .manage-item .mi-time { font-size: 12px; color: #8fa38f; }
+    .manage-item { display: flex; flex-direction: column; gap: 6px; background: #f6fbf6; border-radius: 12px; padding: 10px 12px; }
+    .manage-item .mi-top { display: flex; align-items: center; gap: 10px; }
+    .manage-item .mi-emoji { font-size: 22px; flex-shrink: 0; }
+    .manage-item .mi-name { flex: 1; min-width: 0; font-weight: 700; font-size: 13px; line-height: 1.35; word-break: break-word; }
+    .manage-item .mi-name small { font-weight: 400; color: #9bb09b; font-size: 11px; margin-left: 4px; }
+    .manage-item .mi-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .manage-item .mi-time { font-size: 11px; color: #8fa38f; line-height: 1.4; word-break: break-word; }
     .manage-item .mi-btn { border: none; background: #e3f3e3; color: var(--green-d); border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
     .manage-item .mi-del { background: #ffe0e0; color: #e5484d; }
     .badge { background: #e5484d; color: #fff; border-radius: 999px; font-size: 11px; padding: 2px 8px; margin-left: 4px; }
@@ -790,7 +793,7 @@ function showBloom(species) {
       const s=store(); const box=$("taskManageList"); box.innerHTML="";
       s.tasks.slice().sort((a,b)=>(a.sort_order-b.sort_order)||(String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0))).forEach(t=>{
         const it=document.createElement("div"); it.className="manage-item";
-        it.innerHTML='<span class="mi-emoji">'+(t.emoji||"⭐")+'</span><span class="mi-name">'+esc(t.name)+' <small style="color:#9bb09b">· '+esc(catName(t.category_id))+'</small></span><span class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</span><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button>';
+        it.innerHTML='<div class="mi-top"><span class="mi-emoji">'+(t.emoji||"⭐")+'</span><span class="mi-name">'+esc(t.name)+'<small>· '+esc(catName(t.category_id))+'</small></span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
         it.querySelector(".mi-btn").addEventListener("click",()=>openTaskModal(t));
         it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除"); refresh(); } });
         box.appendChild(it);
@@ -821,8 +824,8 @@ function showBloom(species) {
         '<label class="field">所属科目<select id="tmCat">'+catOpts+'</select></label>'+
         '<label class="field">计划时间<input id="tmTime" type="time" value="'+esc(task.scheduled_time||"09:00")+'"></label>'+
         '<label class="field">时长（分钟）<input id="tmDur" type="number" min="1" value="'+(task.duration||20)+'"></label>'+
-        '<label class="field">开始日期<input id="tmStart" type="date" value="'+esc(task.start_date||"")+'"></label>'+
-        '<label class="field">结束日期（可留空＝长期）<input id="tmEnd" type="date" value="'+esc(task.end_date||"")+'"></label>'+
+        '<label class="field">开始日期<input id="tmStart" type="date" min="'+todayStr()+'" value="'+esc(task.start_date||"")+'"></label>'+
+        '<label class="field">结束日期（可留空＝长期）<input id="tmEnd" type="date" min="'+esc(task.start_date||todayStr())+'" value="'+esc(task.end_date||"")+'"></label>'+
         '<div id="tmValid" class="valid-hint"></div>'+
         '<label class="field">重复（点选星期几）<div id="tmDays" class="day-toggles">'+dayBtns+'</div><div class="day-quick"><button type="button" id="tmAll" class="day-quick-btn">每天</button><button type="button" id="tmWork" class="day-quick-btn">仅工作日</button></div></label>'+
         '<label class="field" style="display:flex;align-items:center;gap:8px;"><input id="tmActive" type="checkbox" '+(task.active!==0?"checked":"")+' style="width:auto;"> 启用该任务</label>'+
@@ -834,7 +837,7 @@ function showBloom(species) {
       $("tmAll").addEventListener("click",()=>overlay.querySelectorAll(".day-btn").forEach(b=>b.classList.add("active")));
       $("tmWork").addEventListener("click",()=>overlay.querySelectorAll(".day-btn").forEach(b=>b.classList.toggle("active",["1","2","3","4","5"].indexOf(b.dataset.d)>=0)));
       function updValid(){ $("tmValid").textContent = validText($("tmStart").value, $("tmEnd").value); }
-      $("tmStart").addEventListener("change", updValid);
+      $("tmStart").addEventListener("change", function(){ const sv=$("tmStart").value; if(sv) $("tmEnd").min=sv; updValid(); });
       $("tmEnd").addEventListener("change", updValid);
       updValid();
       overlay.querySelectorAll("#tmIcons .ic-btn").forEach(b=>b.addEventListener("click",function(){currentEmoji=b.dataset.e;$("tmEmoji").value=currentEmoji;overlay.querySelectorAll("#tmIcons .ic-btn").forEach(function(x){x.classList.toggle("active",x.dataset.e===currentEmoji);});}));
