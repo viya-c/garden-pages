@@ -274,6 +274,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <div class="card">
           <div class="card-title">📱 云端同步状态 <span id="cloudStatus" style="font-size:13px;font-weight:600;padding:2px 8px;border-radius:999px;background:#fde9d0;color:#b08968;vertical-align:middle;">正在连接…</span></div>
           <p class="muted">本版本数据保存在 Supabase 云端，全家共享、自动同步。换手机或给爸爸用，直接打开同一个网址即可，无需导出导入（下方「导出备份」可作额外保险）。<br><span id="cloudStatusTip" style="color:#b08968;">请稍候，正在检测云端连接…</span></p>
+          <button id="btnCloudRetry" class="btn-ghost" style="margin-top:8px;">🔄 重试连接</button>
         </div>
         <div class="card">
           <div class="card-title">🗂️ 科目管理（大类）</div>
@@ -356,7 +357,28 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     // 配置优先读浏览器本地（首次配置弹窗写入），其次才是源码里的常量
     function readConfig() { try { const c = JSON.parse(localStorage.getItem("gg_config") || "{}"); return { url: (c.url || SUPABASE_URL || "").trim(), key: (c.key || SUPABASE_ANON_KEY || "").trim() }; } catch (e) { return { url: "", key: "" }; } }
     const _cfg = readConfig();
-    const sb = (_cfg.url && _cfg.key && window.supabase) ? window.supabase.createClient(_cfg.url, _cfg.key) : null;
+    // 带重试的网络层：应对国内网络抖动/超时（supabase.co 在大陆偶发不稳定）
+    async function retryFetch(input, init) {
+      const maxTries = 3, timeoutMs = 15000;
+      let lastErr;
+      for (let i = 0; i < maxTries; i++) {
+        try {
+          const ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+          const to = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+          const r = await fetch(input, Object.assign({}, init, ctrl ? { signal: ctrl.signal } : {}));
+          if (to) clearTimeout(to);
+          return r;
+        } catch (e) {
+          lastErr = e;
+          if (i < maxTries - 1) await new Promise(res => setTimeout(res, 500 * (i + 1)));
+        }
+      }
+      throw lastErr;
+    }
+    const sb = (_cfg.url && _cfg.key && window.supabase) ? window.supabase.createClient(_cfg.url, _cfg.key, {
+      db: { timeout: 30000 },
+      global: { fetch: retryFetch }
+    }) : null;
     // ===== 云端连接状态指示（替代原写死的“云端多人版”文案）=====
     function updateCloudStatus(state) {
       const el = $("cloudStatus"), tip = $("cloudStatusTip");
@@ -542,7 +564,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         ]);
         const c = (cats.data)||[], t = (tasks.data)||[], ck = (checkins.data)||[], rd = (redemptions.data)||[], st = (settings.data)||[];
         const anyErr = [cats,tasks,checkins,redemptions,settings].some(r => r.error);
-        if (anyErr) throw new Error("supabase query error: " + JSON.stringify([cats,tasks,checkins,redemptions,settings].map(r=>r.error&&r.error.message)));
+        if (anyErr) { const detail = [cats,tasks,checkins,redemptions,settings].map(r=>r.error&&r.error.message).filter(Boolean).join("；"); throw new Error("云端返回错误：" + detail); }
         let s;
         if (c.length === 0) {
           s = defaultStore();
@@ -561,7 +583,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         console.error("loadAll failed", e);
         MEM = bootstrapLocal();
         updateCloudStatus("error");
-        toast("⚠️ 云端同步失败，已用本地数据。请检查网络后刷新");
+        const msg = (e && e.message) ? e.message : String(e);
+        const tip = $("cloudStatusTip");
+        if (tip) tip.textContent = "同步失败原因：" + msg + "（可点上方「重试连接」）";
+        toast("⚠️ 云端同步失败，已用本地数据");
       }
     }
 
@@ -935,8 +960,10 @@ function showBloom(species) {
       $("btnReset").addEventListener("click",()=>{ if(confirm("确定清空所有打卡与开花记录吗？（任务与设置保留）")){ const s=store(); s.checkins=[]; s.redemptions=[]; recomputeGrowth(s); save(s); toast("已清空"); refresh(); } });
     }
 
+    let _rtSubscribed = false;
     function subscribeRealtime() {
-      if (!sb) return;
+      if (!sb || _rtSubscribed) return;
+      _rtSubscribed = true;
       ["categories","tasks","checkins","redemptions","settings"].forEach(t=>{
         sb.channel("rt:"+t).on("postgres_changes", { event:"*", schema:"public", table:t }, ()=>onRealtime()).subscribe();
       });
@@ -945,6 +972,14 @@ function showBloom(species) {
     function showConfigHint() { const m = $("setupModal"); if (m) m.classList.remove("hidden"); }
     $("setupSave").addEventListener("click", ()=>{ const u = $("setupUrl").value.trim(), k = $("setupKey").value.trim(); if (!u || !k) { $("setupErr").textContent = "两项都要填哦～"; $("setupErr").classList.remove("hidden"); return; } localStorage.setItem("gg_config", JSON.stringify({ url:u, key:k })); location.reload(); });
     bind();
+    const btnCloudRetry = $("btnCloudRetry");
+    if (btnCloudRetry) btnCloudRetry.addEventListener("click", async ()=>{
+      if (!sb) { updateCloudStatus("offline"); toast("未配置云端，无法连接"); return; }
+      updateCloudStatus("connecting");
+      toast("正在重新连接云端…");
+      try { await loadAll(); refresh(); subscribeRealtime(); }
+      catch (e) { /* 状态已由 loadAll 内部设置 */ }
+    });
     if (sb) {
       updateCloudStatus("connecting");
       loadAll().then(()=>{ if(!MEM) MEM=bootstrapLocal(); subscribeRealtime(); refresh(); }).catch(()=>{ if(!MEM) MEM=bootstrapLocal(); updateCloudStatus("error"); refresh(); });
