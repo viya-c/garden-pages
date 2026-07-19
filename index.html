@@ -72,9 +72,10 @@
     .task-card:active { transform: scale(.98); }
     .task-emoji { font-size: 28px; width: 38px; text-align: center; }
     .task-main { flex: 1; min-width: 0; }
-    .task-name { font-weight: 800; font-size: 14.5px; line-height:1.25; }
-    .task-time { font-size: 12px; color: #8fa38f; margin-top: 1px; }
-    .task-status { font-size: 12px; font-weight: 800; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+    .task-name { font-weight: 800; font-size: 13px; line-height:1.25; }
+    .task-time { font-size: 11px; color: #8fa38f; margin-top: 1px; }
+    .task-status { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+    .overtime-hint { font-size: 10px; color: #e5484d; font-weight: 700; margin-left: 6px; align-self: center; }
     .status-pending { background: #eef0f3; color: #8a93a0; }
     .status-normal { background: #d8f5e3; color: #1a9d54; }
     .status-late { background: #fff0d4; color: #d99415; }
@@ -82,10 +83,16 @@
     .task-card.s-normal { border-left-color: #7be0a4; }
     .task-card.s-late { border-left-color: var(--gold); }
     .task-card.s-timeout { border-left-color: #ff9b9b; opacity: .92; }
+    .status-missed { background: #ffe0e0; color: #e5484d; }
+    .task-card.s-missed { border-left-color: #ff9b9b; opacity: .92; }
     .undo-btn { border: none; background: #f1f2f5; color: #8a93a0; border-radius: 10px; padding: 6px 8px; font-size: 12px; cursor: pointer; }
     .empty { text-align: center; color: #b0c0b0; padding: 40px 0; }
     .card { background: var(--card); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
-    .card-title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .card-title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+    .mom-arrow { font-size: 11px; color: #b08968; transition: transform .15s ease; flex-shrink: 0; }
+    .card.collapsed .mom-arrow { transform: rotate(-90deg); }
+    .card.collapsed .mom-body { display: none; }
+    .card.collapsed .card-title { margin-bottom: 6px; }
     .card-subtitle { font-weight: 700; font-size: 13px; color: #7f947f; margin: 14px 0 8px; }
     .seed-card { text-align: center; }
     .seed-visual { font-size: 56px; line-height: 1.1; margin: 4px 0; display: flex; justify-content: center; }
@@ -775,12 +782,17 @@
     // ---------- 打卡逻辑 ----------
     function viewNow(){ if(!STATE) return new Date(); if(STATE.date===todayStr()) return new Date(); const [Y,Mo,D]=STATE.date.split("-").map(Number); const past = STATE.date<todayStr(); return new Date(Y, Mo-1, D, past?23:0, past?59:0, past?59:0); }
     function taskDisplay(task, now) {
-      if (task.checkin) return task.checkin.status==="done_late" ? {key:"late",label:"延时",cls:"s-late"} : {key:"normal",label:"正常",cls:"s-normal"};
+      if (task.checkin) {
+        // 已打卡：按时完成；补打卡：迟到后补打
+        if (task.checkin.status==="done_late") return {key:"late", label:"补打卡", cls:"s-late", overtime:null};
+        return {key:"normal", label:"已打卡", cls:"s-normal", overtime:null};
+      }
       const [Y,Mo,D]=STATE.date.split("-").map(Number);
       const [h,m]=task.scheduled_time.split(":").map(Number);
       const deadline=new Date(Y, Mo-1, D, h, m+task.duration, 0);
-      if(now>deadline) return {key:"timeout",label:"超时",cls:"s-timeout"};
-      return {key:"pending",label:"待打卡",cls:""};
+      if (now<=deadline) return {key:"pending", label:"待打卡", cls:"", overtime:null};
+      // 未打卡且已过点/时长：主状态“未打卡”，旁边用小字提示“超时”
+      return {key:"missed", label:"未打卡", cls:"s-missed", overtime:"超时"};
     }
     function endTime(t){ const [h,m]=t.scheduled_time.split(":").map(Number); const d=new Date(); d.setHours(h,m,0,0); d.setMinutes(d.getMinutes()+t.duration); const z=(n)=>String(n).padStart(2,"0"); return z(d.getHours())+":"+z(d.getMinutes()); }
 
@@ -824,9 +836,15 @@
           const st=taskDisplay(t,now); const done=!!t.checkin;
           const by = done && t.checkin.checked_by ? t.checkin.checked_by : "";
           const card=document.createElement("div"); card.className="task-card "+st.cls+(locked && !done ? " locked" : "");
-          const lockBadge = (locked && !done) ? '<div class="task-status status-locked">🔒 未解锁</div>' : '<div class="task-status status-'+st.key+'">'+st.label+'</div>';
+          let statusHtml;
+          if (locked && !done) statusHtml = '<div class="task-status status-locked">🔒 未解锁</div>';
+          else {
+            statusHtml = '<div class="task-status status-'+st.key+'">'+st.label+'</div>';
+            if (st.overtime) statusHtml += '<span class="overtime-hint">'+st.overtime+'</span>';
+          }
+          const lockBadge = statusHtml;
           const undoBtn = (done && !locked) ? '<button class="undo-btn">↩ 撤销</button>' : "";
-          card.innerHTML='<div class="task-emoji">'+(t.emoji||"⭐")+'</div><div class="task-main"><div class="task-name">'+esc(t.name)+'</div><div class="task-time">'+t.scheduled_time+'–'+endTime(t)+' · '+t.duration+'分钟'+(by?' · <span class="by-badge">👤 '+esc(by)+'</span>':'')+'</div></div>'+lockBadge+undoBtn;
+          card.innerHTML='<div class="task-main"><div class="task-name">'+esc(t.name)+'</div><div class="task-time">'+t.scheduled_time+'–'+endTime(t)+' · '+t.duration+'分钟'+(by?' · <span class="by-badge">👤 '+esc(by)+'</span>':'')+'</div></div>'+lockBadge+undoBtn;
           if(done && !locked){ card.querySelector(".undo-btn").addEventListener("click",(e)=>{ e.stopPropagation(); undoCheckin(t); }); }
           else if(!done && !locked){ card.addEventListener("click",()=>doCheckin(t)); }
           else if(locked && !done){ card.addEventListener("click",()=>toast("🔒 该日期还未到，暂不能打卡")); }
@@ -915,9 +933,24 @@ function showBloom(species) {
     function spawnConfetti(ov){ const em=["🎉","✨","🌸","💮","🌟"]; for(let i=0;i<14;i++){ const c=document.createElement("div"); c.className="confetti"; c.textContent=em[i%em.length]; c.style.left=(10+Math.random()*80)+"%"; c.style.top="10%"; c.style.animationDelay=(Math.random()*0.5)+"s"; ov.appendChild(c); } }
 
     // ---------- 妈妈中心 ----------
+    // 妈妈中心：每个模块（含云端同步状态）可点击标题折叠
+    let _momCollapsedInit=false;
+    function initMomCollapse(){
+      if(_momCollapsedInit) return; _momCollapsedInit=true;
+      const mc=document.getElementById("momContent"); if(!mc) return;
+      mc.querySelectorAll(".card").forEach(function(card){
+        const title=card.querySelector(".card-title"); if(!title) return;
+        const arrow=document.createElement("span"); arrow.className="mom-arrow"; arrow.textContent="▾"; title.insertBefore(arrow, title.firstChild);
+        const body=document.createElement("div"); body.className="mom-body";
+        while(card.firstChild!==title){ body.appendChild(card.firstChild); }
+        card.appendChild(body);
+        title.addEventListener("click",function(){ card.classList.toggle("collapsed"); });
+      });
+    }
     function renderMom() {
       if(!momUnlocked){ $("pinGate").classList.remove("hidden"); $("momContent").classList.add("hidden"); return; }
       $("pinGate").classList.add("hidden"); $("momContent").classList.remove("hidden");
+      initMomCollapse();
       if(STATE){ $("setChildName").value=STATE.child_name; $("setFpr").value=STATE.config.flowers_per_redemption; $("setPpr").value=STATE.config.points_per_redemption; }
       CATEGORIES = store().categories;
       renderCategories();
@@ -978,7 +1011,7 @@ function showBloom(species) {
         if(!ctasks.length){ const empty=document.createElement("div"); empty.style.cssText="color:#b08968;font-size:12px;padding:2px 6px 6px;"; empty.textContent="（暂无任务）"; box.appendChild(empty); return; }
         ctasks.forEach(t=>{
           const it=document.createElement("div"); it.className="manage-item task-item";
-          it.innerHTML='<div class="mi-top"><span class="mi-emoji">'+(t.emoji||"⭐")+'</span><span class="mi-name">'+esc(t.name)+'</span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
+          it.innerHTML='<div class="mi-top"><span class="mi-name">'+esc(t.name)+'</span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
           it.querySelector(".mi-btn").addEventListener("click",()=>openTaskModal(t));
           it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除"); refresh(); } });
           box.appendChild(it);
@@ -988,7 +1021,7 @@ function showBloom(species) {
         const head=document.createElement("div"); head.style.cssText="font-weight:700;font-size:14px;color:#c62828;margin:10px 2px 4px;"; head.textContent="⚠️ 未分类（请编辑任务并选择科目）"; box.appendChild(head);
         orphan.forEach(t=>{
           const it=document.createElement("div"); it.className="manage-item task-item";
-          it.innerHTML='<div class="mi-top"><span class="mi-emoji">'+(t.emoji||"⭐")+'</span><span class="mi-name">'+esc(t.name)+'</span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
+          it.innerHTML='<div class="mi-top"><span class="mi-name">'+esc(t.name)+'</span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
           it.querySelector(".mi-btn").addEventListener("click",()=>openTaskModal(t));
           it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除"); refresh(); } });
           box.appendChild(it);
@@ -1021,12 +1054,10 @@ function showBloom(species) {
       const dayBtns=[1,2,3,4,5,6,7].map(function(d){return '<button type="button" class="day-btn '+(initDays.indexOf(d)>=0?"active":"")+'" data-d="'+d+'">'+DAY_NAMES[d-1]+'</button>';}).join("");
       const initCatId=seed.category_id||(CATEGORIES.length?CATEGORIES[0].id:1);
       const catEmoji=function(id){const c=CATEGORIES.find(function(x){return x.id===id;});return c?c.emoji:"⭐";};
-      let currentEmoji=seed.emoji||catEmoji(initCatId);
+      let currentEmoji=catEmoji(initCatId);
       overlay.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;display:flex;align-items:flex-end;justify-content:center;";
       overlay.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;"><div style="font-weight:800;font-size:17px;margin-bottom:12px;">'+(isNew?"添加任务":"编辑任务")+'</div>'+
         '<label class="field">任务名称<input id="tmName" type="text" value="'+esc(seed.name||"")+'" placeholder="如：数学"></label>'+
-        '<label class="field">图标（点选，默认与科目一致）<input id="tmEmoji" type="text" value="'+esc(currentEmoji)+'" maxlength="4" style="text-align:center;font-size:18px;"></label>'+
-        '<div id="tmIcons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">'+PRESET_ICONS.map(function(e){return '<button type="button" class="ic-btn '+(e===currentEmoji?"active":"")+'" data-e="'+e+'">'+e+'</button>';}).join("")+'</div>'+
         '<label class="field">所属科目<select id="tmCat">'+catOpts+'</select></label>'+
         '<label class="field">计划时间<input id="tmTime" type="time" value="'+esc(seed.scheduled_time||"09:00")+'"></label>'+
         '<label class="field">时长（分钟）<input id="tmDur" type="number" min="1" value="'+(seed.duration||20)+'"></label>'+
@@ -1046,8 +1077,6 @@ function showBloom(species) {
       $("tmStart").addEventListener("change", function(){ const sv=$("tmStart").value; if(sv) $("tmEnd").min=sv; updValid(); });
       $("tmEnd").addEventListener("change", updValid);
       updValid();
-      overlay.querySelectorAll("#tmIcons .ic-btn").forEach(b=>b.addEventListener("click",function(){currentEmoji=b.dataset.e;$("tmEmoji").value=currentEmoji;overlay.querySelectorAll("#tmIcons .ic-btn").forEach(function(x){x.classList.toggle("active",x.dataset.e===currentEmoji);});}));
-      $("tmCat").addEventListener("change",function(){currentEmoji=catEmoji(parseInt($("tmCat").value,10));$("tmEmoji").value=currentEmoji;overlay.querySelectorAll("#tmIcons .ic-btn").forEach(function(x){x.classList.toggle("active",x.dataset.e===currentEmoji);});});
       $("tmSave").addEventListener("click",()=>{
         const sel=[].slice.call(overlay.querySelectorAll(".day-btn.active")).map(b=>b.dataset.d);
         const s=store(); const payload={ id:task.id, category_id:parseInt($("tmCat").value,10), name:$("tmName").value.trim()||"未命名", emoji:currentEmoji||"⭐", scheduled_time:$("tmTime").value||"09:00", duration:parseInt($("tmDur").value,10)||20, repeat_days:sel.join(",")||"1,2,3,4,5,6,7", active:$("tmActive").checked?1:0, start_date:$("tmStart").value||"", end_date:$("tmEnd").value||"" };
