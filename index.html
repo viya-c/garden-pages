@@ -406,9 +406,10 @@
     }
     function settingsSnapshot(s){ return { categories:s.categories, tasks:s.tasks, checkins:s.checkins, redemptions:s.redemptions, settings: settingsRec(s) }; }
     let _syncTimer = null;
+    let _syncFails = 0;
     async function syncNow() {
       if (!cloudReady || !MEM) return;
-      for (let attempt = 0; attempt < 4; attempt++) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         try {
           const remote = await githubRead();
           const merged = remote.store ? mergeStores(MEM, remote.store, _prev) : JSON.parse(JSON.stringify(MEM));
@@ -416,14 +417,36 @@
           MEM = merged; _prev = settingsSnapshot(merged);
           recomputeGrowth(MEM);
           try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
+          _syncFails = 0;
           updateCloudStatus("online");
           if (typeof refresh === "function") refresh();
           return;
         } catch (e) {
           if (e && e.code === "CONFLICT") { await new Promise(r => setTimeout(r, 400)); continue; }
-          console.error("syncNow failed", e); updateCloudStatus("error"); toast("⚠️ 云端同步失败，已保留本机数据"); return;
+          const m = (e && e.message) ? e.message : "";
+          // 401/403 = 令牌失效或仓库路径/权限不对，需重新配置，立即明确报错
+          if (/401|403/.test(m)) {
+            updateCloudStatus("error");
+            const tip = $("cloudStatusTip");
+            if (tip) tip.textContent = "写入被拒（401/403）：请点「重试连接」检查①令牌是否有 repo 权限 ②仓库路径是否为 viya-c/garden-data。";
+            toast("⚠️ 写入被拒：检查令牌权限/仓库路径");
+            return;
+          }
+          // 其余（网络抖动等）按指数退避重试，不直接报警
+          _syncFails++;
+          if (_syncFails >= 3) {
+            updateCloudStatus("error");
+            const tip = $("cloudStatusTip");
+            if (tip) tip.textContent = "同步失败：" + errText(e) + "（网络不稳定，已多次重试；可点「重试连接」）";
+          } else {
+            updateCloudStatus("retry");
+          }
+          console.error("syncNow failed (attempt " + attempt + ")", e);
+          const delay = Math.min(800 * Math.pow(2, attempt), 8000);
+          await new Promise(r => setTimeout(r, delay));
         }
       }
+      toast("⚠️ 云端写入暂未成功，已保留本机数据，稍后会自动重试");
     }
     async function persistStore() {
       if (!cloudReady || !MEM) return;
@@ -438,6 +461,7 @@
       const map = {
         connecting: { t:"🔄 正在同步…", bg:"#fde9d0", c:"#b08968", tip:"正在与 GitHub 云端同步…" },
         online:     { t:"☁️ 云端已连接·已同步", bg:"#e3f5e3", c:"#2e7d32", tip:"数据已存到 GitHub 云端，全家共享，刷新不丢失。" },
+        retry:      { t:"🔄 重连中…", bg:"#fde9d0", c:"#b08968", tip:"网络稍有波动，正在自动重试同步…" },
         offline:    { t:"⚠️ 未连接·本地模式", bg:"#fde3e3", c:"#c62828", tip:"未配置 GitHub 云端，当前为本地模式——数据存本机（刷新不丢），但换设备不共享。点「重试连接」配置令牌。" },
         error:      { t:"⚠️ 同步失败", bg:"#fde3e3", c:"#c62828", tip:"与 GitHub 云端同步失败，请检查网络或令牌后重试。" }
       };
@@ -606,7 +630,18 @@
         MEM = merged; _prev = settingsSnapshot(merged); recomputeGrowth(MEM);
         try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
         updateCloudStatus("online");
-        if (!remote.store && cloudReady) { syncNow().catch(() => {}); } // 首次：把本机初始数据写入云端作为种子文件
+        if (!remote.store && cloudReady) {
+          // 首次：把本机初始数据写入云端作为种子文件；若仓库为空且写入被拒，明确报错（多半是仓库路径填错）
+          syncNow().catch((err) => {
+            console.error("seed push failed", err);
+            const mm = (err && err.message) || "";
+            if (/401|403/.test(mm)) {
+              updateCloudStatus("error");
+              const tip = $("cloudStatusTip");
+              if (tip) tip.textContent = "云端仓库是空的且写入被拒（401/403）：请确认仓库路径为 viya-c/garden-data，且令牌有 repo 权限。";
+            }
+          });
+        }
       } catch (e) {
         console.error("loadAll failed", e);
         // 云端失败时【保留】当前数据，不再清空；优先从本地缓存恢复
