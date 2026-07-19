@@ -272,6 +272,8 @@
           <div class="card-title">📱 云端同步状态 <span id="cloudStatus" style="font-size:13px;font-weight:600;padding:2px 8px;border-radius:999px;background:#fde9d0;color:#b08968;vertical-align:middle;">正在连接…</span></div>
           <p class="muted">本版本数据保存在 <b>GitHub 云端</b>，全家共享、自动同步。换手机或给爸爸用，直接打开同一个网址即可，无需导出导入（下方「导出备份」可作额外保险）。<br><span id="cloudStatusTip" style="color:#b08968;">请稍候，正在检测云端连接…</span></p>
           <button id="btnCloudRetry" class="btn-ghost" style="margin-top:8px;">🔄 重试连接</button>
+          <button id="btnSyncMom" class="btn-primary" style="margin-top:8px;margin-left:8px;">☁️ 立即同步</button>
+          <p class="muted" style="margin-top:8px;">数据每 10 秒自动与云端同步；另一台手机改了内容，本机会自动更新并提示「📥 已同步家人的最新修改」。如长时间未更新，点上面的「立即同步」即可。</p>
           <button id="btnReconfig" class="btn-ghost" style="margin-top:8px;margin-left:8px;">⚙️ 修改配置</button>
           <div id="appVer" style="font-size:11px;color:#c2c2c2;margin-top:8px;">应用版本加载中…</div>
         </div>
@@ -353,7 +355,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19e"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19f"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -398,15 +400,28 @@
     function applySettings(s, rec){ for (const f of SET_FIELDS) s[f] = rec[f]; }
     function mergeArray(localArr, remoteArr, prevArr) {
       const lm = new Map((localArr||[]).map(r=>[r.id,r])), rm = new Map((remoteArr||[]).map(r=>[r.id,r])), pm = new Map((prevArr||[]).map(r=>[r.id,r]));
-      const ids = new Set([...lm.keys(), ...rm.keys()]); const out = [];
+      const ids = new Set([...lm.keys(), ...rm.keys(), ...pm.keys()]); const out = [];
       for (const id of ids) {
         const l = lm.get(id), r = rm.get(id), p = pm.get(id);
-        if (l && !r) out.push(l);
-        else if (!l && r) out.push(r);
-        else if (!p) out.push(r || l);                                // 无祖先：云端优先
-        else if (JSON.stringify(l) === JSON.stringify(p)) out.push(r); // 本机未改 → 用云端
-        else if (JSON.stringify(r) === JSON.stringify(p)) out.push(l); // 云端未改 → 用本机
-        else out.push(l);                                             // 两边都改（罕见）→ 本机优先
+        if (p) {
+          // —— 祖先有该记录：更新 / 删除 场景（三路合并核心）——
+          if (l && r) {
+            if (JSON.stringify(l) === JSON.stringify(p)) out.push(r);   // 本机未改 → 用云端
+            else if (JSON.stringify(r) === JSON.stringify(p)) out.push(l); // 云端未改 → 用本机
+            else out.push(l);                                          // 两边都改（罕见）→ 本机优先
+          } else if (l && !r) {
+            out.push(l);                                              // 本机保留/改了，云端却删了 → 本机优先保留
+          } else if (!l && r) {
+            if (JSON.stringify(r) === JSON.stringify(p)) { /* 本机删了、云端没动过 → 真删除，不保留 */ }
+            else out.push(r);                                         // 本机删了、但云端改过 → 保留云端，避免误删家人修改
+          }
+          // !l && !r && p：两端都删了 → 不保留
+        } else {
+          // —— 祖先没有：本机或云端“新增”的场景 ——
+          if (l && !r) out.push(l);
+          else if (!l && r) out.push(r);
+          else if (l && r) out.push(l);                              // 同 id 并发新增（罕见）→ 本机优先
+        }
       }
       return out;
     }
@@ -423,6 +438,9 @@
       return m;
     }
     function settingsSnapshot(s){ return { categories:(s.categories||[]).map(x=>({...x})), tasks:(s.tasks||[]).map(x=>({...x})), checkins:(s.checkins||[]).map(x=>({...x})), redemptions:(s.redemptions||[]).map(x=>({...x})), settings: settingsRec(s) }; } // 每个元素浅拷贝：断开与 MEM/remote 的对象别名，避免就地修改污染 _prev 导致合并回退
+    // 云端内容指纹：用于判断“云端是否被另一台手机改动”，从而提示家人更新
+    function sigOf(s){ if(!s) return ""; try { return JSON.stringify({ c:(s.categories||[]).map(x=>x.id), t:(s.tasks||[]).map(x=>x.id), ch:(s.checkins||[]).map(x=>x.id+"|"+(x.status||"")), r:(s.redemptions||[]).map(x=>x.id+"|"+(x.status||"")), n:s.child_name, f:s.flowers_per_redemption, p:s.points_per_redemption, m:s.mom_pin, fl:(s.flowers||[]).length }); } catch(e){ return ""; } }
+    let _cloudSig = ""; // 本机最近一次“看到的云端指纹”，用来发现家人的改动
     let _syncTimer = null;
     let _syncFails = 0;
     let _localEditAt = 0; // 最近一次本地编辑的时间戳，防止轮询立即覆盖
@@ -435,6 +453,7 @@
           const toWrite = remote.store ? mergeStores(MEM, remote.store, _prev || settingsSnapshot(remote.store)) : JSON.parse(JSON.stringify(MEM));
           const sha = await githubWrite(toWrite, remote.sha);
           MEM = toWrite; _prev = settingsSnapshot(toWrite);
+          _cloudSig = sigOf(toWrite); // 记下本机刚写回的指纹，避免把“自己的改动”误判成家人的更新
           recomputeGrowth(MEM);
           try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
           _syncFails = 0;
@@ -668,11 +687,16 @@
         const remote = await githubRead();
         // 读取期间本机发生过编辑（保存/打卡）→ 丢弃这次拉取结果，避免把旧数据覆盖回刚改的内容（修复“保存后立刻回退”）
         if (_localEditAt !== _editAtStart) return;
+        const remoteSig = sigOf(remote.store);
+        // 云端被“另一台手机”改动？与上次看到的指纹不同、且不是本机刚在写的改动（>15s）→ 视为家人更新
+        const familyChanged = !!remote.store && _cloudSig !== "" && remoteSig !== _cloudSig && (Date.now() - _localEditAt) > 15000;
         const base = MEM || readLocal() || bootstrapLocal();
         const merged = remote.store ? mergeStores(base, remote.store, _prev || settingsSnapshot(base)) : JSON.parse(JSON.stringify(base));
         MEM = merged; if (remote.store) _prev = settingsSnapshot(remote.store); recomputeGrowth(MEM);
+        _cloudSig = remoteSig; // 以云端当前指纹为基线，避免重复提示
         try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
         updateCloudStatus("online");
+        if (familyChanged) { toast("📥 已同步家人的最新修改"); if (typeof refresh === "function") refresh(); }
         if (!remote.store && cloudReady) {
           // 首次：把本机初始数据写入云端作为种子文件；若仓库为空且写入被拒，明确报错（多半是仓库路径填错）
           syncNow().catch((err) => {
@@ -975,7 +999,7 @@ function showBloom(species) {
         it.innerHTML='<span class="mi-emoji">'+(c.emoji||"⭐")+'</span><span class="mi-name">'+esc(c.name)+'</span><span class="mi-time">'+(c.active?"":"· 已停用")+'</span><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button>';
         it.querySelector(".mi-btn").addEventListener("click",()=>openCatModal(c));
         it.querySelector(".mi-del").addEventListener("click",()=>{
-          if(confirm("删除科目「"+c.name+"」会连同其下任务一起删除，确定？")){ const ss=store(); ss.tasks=ss.tasks.filter(t=>t.category_id!==c.id); ss.categories=ss.categories.filter(x=>x.id!==c.id); save(ss); rebuildGrowth(); toast("已删除"); refresh(); }
+          if(confirm("删除科目「"+c.name+"」会连同其下任务一起删除，确定？")){ const ss=store(); ss.tasks=ss.tasks.filter(t=>t.category_id!==c.id); ss.categories=ss.categories.filter(x=>x.id!==c.id); save(ss); rebuildGrowth(); toast("已删除 ✅ 已同步云端，家人刷新即可见"); refresh(); }
         });
         box.appendChild(it);
       });
@@ -996,7 +1020,7 @@ function showBloom(species) {
       $("cmSave").addEventListener("click",()=>{
         const s=store(); const payload={ id:cat.id, name:$("cmName").value.trim()||"未命名", emoji:$("cmEmoji").value.trim()||"⭐", active:$("cmActive").checked?1:0 };
         if(cat.id){ const c=s.categories.find(x=>x.id===cat.id); Object.assign(c,payload); } else { payload.id=crypto.randomUUID(); s.categories.push(payload); }
-        save(s); overlay.remove(); toast("已保存"); refresh();
+        save(s); overlay.remove(); toast("已保存 ✅ 已同步云端，家人会看到"); refresh();
       });
     }
     function renderTaskManage() {
@@ -1019,7 +1043,7 @@ function showBloom(species) {
           const it=document.createElement("div"); it.className="manage-item task-item";
           it.innerHTML='<div class="mi-top"><span class="mi-name">'+esc(t.name)+'</span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
           it.querySelector(".mi-btn").addEventListener("click",()=>openTaskModal(t));
-          it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除"); refresh(); } });
+          it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除 ✅ 已同步云端，家人刷新即可见"); refresh(); } });
           box.appendChild(it);
         });
       });
@@ -1029,7 +1053,7 @@ function showBloom(species) {
           const it=document.createElement("div"); it.className="manage-item task-item";
           it.innerHTML='<div class="mi-top"><span class="mi-name">'+esc(t.name)+'</span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
           it.querySelector(".mi-btn").addEventListener("click",()=>openTaskModal(t));
-          it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除"); refresh(); } });
+          it.querySelector(".mi-del").addEventListener("click",()=>{ if(confirm("确定删除任务「"+t.name+"」？")){ const ss=store(); ss.tasks=ss.tasks.filter(x=>x.id!==t.id); ss.checkins=ss.checkins.filter(c=>c.task_id!==t.id); save(ss); rebuildGrowth(); toast("已删除 ✅ 已同步云端，家人刷新即可见"); refresh(); } });
           box.appendChild(it);
         });
       }
@@ -1089,7 +1113,7 @@ function showBloom(species) {
         if(task.id){ const t=s.tasks.find(x=>x.id===task.id); Object.assign(t,payload); } else { payload.id=crypto.randomUUID(); payload.sort_order=(s.tasks.filter(x=>x.category_id===payload.category_id).reduce((mx,x)=>Math.max(mx,(x.sort_order||0)),0))+1; s.tasks.push(payload); }
         // 记住本次填写的常用值，下次新增任务时默认带入
         _lastTask = { category_id:payload.category_id, scheduled_time:payload.scheduled_time, duration:payload.duration, emoji:payload.emoji, repeat_days:payload.repeat_days, start_date:payload.start_date, end_date:payload.end_date, active:payload.active }; saveLastTask(_lastTask);
-        save(s); overlay.remove(); toast("已保存"); refresh();
+        save(s); overlay.remove(); toast("已保存 ✅ 已同步云端，家人会看到"); refresh();
       });
     }
     function resolvePoints(id, action) {
@@ -1168,6 +1192,13 @@ function showBloom(species) {
       if (!cloudReady) { toast("未配置云端，无法同步"); return; }
       toast("正在同步…");
       try { await loadAll(); refresh(); toast("已同步 ☁️"); }
+      catch (e) { toast("同步失败，稍后自动重试"); }
+    });
+    const btnSyncMom = $("btnSyncMom");
+    if (btnSyncMom) btnSyncMom.addEventListener("click", async ()=>{
+      if (!cloudReady) { toast("未配置云端，无法同步"); return; }
+      toast("正在同步…");
+      try { await loadAll(); refresh(); toast("已同步 ☁️ 家人改动也拉取了"); }
       catch (e) { toast("同步失败，稍后自动重试"); }
     });
     // 切回页面时立即同步一次，体验更接近“实时”
