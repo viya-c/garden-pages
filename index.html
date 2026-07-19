@@ -68,7 +68,7 @@
     .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg,#9be39b,#4caa4c); border-radius: 999px; transition: width .4s ease; }
     .task-list { display: flex; flex-direction: column; gap: 8px; }
     .cat-header { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 14px; color: #5a7a5a; cursor: pointer; user-select: none; padding: 4px 2px; -webkit-tap-highlight-color: transparent; }
-    .cat-header .cat-toggle { font-size: 11px; transition: transform .2s ease; color: #9bb09b; width: 16px; text-align: center; flex-shrink: 0; }
+    .cat-header .cat-toggle { font-size: 16px; transition: transform .2s ease; color: #9bb09b; width: 22px; text-align: center; flex-shrink: 0; }
     .cat-header .cat-toggle.collapsed { transform: rotate(-90deg); }
     .cat-body-collapsed { display: none; }
     .task-card { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: var(--radius); padding: 9px 11px; box-shadow: var(--shadow); border-left: 7px solid var(--mint); cursor: pointer; transition: transform .12s ease; }
@@ -92,7 +92,7 @@
     .empty { text-align: center; color: #b0c0b0; padding: 40px 0; }
     .card { background: var(--card); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
     .card-title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
-    .mom-arrow { font-size: 11px; color: #b08968; transition: transform .15s ease; flex-shrink: 0; }
+    .mom-arrow { font-size: 16px; color: #b08968; transition: transform .15s ease; flex-shrink: 0; }
     .card.collapsed .mom-arrow { transform: rotate(-90deg); }
     .card.collapsed .mom-body { display: none; }
     .card.collapsed .card-title { margin-bottom: 6px; }
@@ -213,6 +213,7 @@
           <div id="dayTag" class="day-tag"></div>
         </div>
         <button id="nextDay" class="round-btn">▶</button>
+        <button id="btnSyncNow" class="round-btn" title="立即与云端同步">🔄</button>
       </div>
       <div class="summary">
         <div class="stat grow"><div class="stat-ico">🌱</div><b id="growCount">0/3</b><small>种子成长</small></div>
@@ -352,7 +353,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19b"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19c"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -427,17 +428,11 @@
     let _localEditAt = 0; // 最近一次本地编辑的时间戳，防止轮询立即覆盖
     async function syncNow() {
       if (!cloudReady || !MEM) return;
-      const justEdited = (Date.now() - _localEditAt) < 5000; // 本地5秒内编辑过
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           const remote = await githubRead();
-          let toWrite;
-          if (justEdited) {
-            // 刚编辑过：直接用本机最新数据写上去，不做合并（避免合并逻辑误判覆盖）
-            toWrite = JSON.parse(JSON.stringify(MEM));
-          } else {
-            toWrite = remote.store ? mergeStores(MEM, remote.store, _prev || settingsSnapshot(remote.store)) : JSON.parse(JSON.stringify(MEM));
-          }
+          // 始终与云端最新数据做三路合并后写回：既能保留本机刚改的内容，也不会把另一台手机同时改的内容冲掉
+          const toWrite = remote.store ? mergeStores(MEM, remote.store, _prev || settingsSnapshot(remote.store)) : JSON.parse(JSON.stringify(MEM));
           const sha = await githubWrite(toWrite, remote.sha);
           MEM = toWrite; _prev = settingsSnapshot(toWrite);
           recomputeGrowth(MEM);
@@ -513,6 +508,7 @@
     const COLLAPSED_KEY = "gg_collapsed";
     let _collapsedSet = new Set((sessionStorage.getItem(COLLAPSED_KEY)||"").split(",").filter(Boolean));
     function toggleCollapse(catId) {
+      catId = String(catId); // 集合里存的是字符串，必须统一类型，否则查找/切换会永远判错
       if (_collapsedSet.has(catId)) { _collapsedSet.delete(catId); }
       else { _collapsedSet.add(catId); }
       sessionStorage.setItem(COLLAPSED_KEY, [..._collapsedSet].join(","));
@@ -1141,7 +1137,7 @@ function showBloom(species) {
         if (document.hidden) return;
         if (document.querySelector(".setup-modal:not(.hidden)")) return; // 配置弹窗打开时不刷新
         loadAll(true).then(()=>refresh()).catch(()=>{}); // 静默轮询：失败不弹提示、不清空数据
-      }, 20000);
+      }, 10000);
     }
     function showConfigHint() {
       // 预填当前配置，方便只改地址
@@ -1164,9 +1160,20 @@ function showBloom(species) {
       // 随时可重新打开配置（修正令牌/仓库路径）
       showConfigHint();
     });
+    const btnSyncNow = $("btnSyncNow");
+    if (btnSyncNow) btnSyncNow.addEventListener("click", async ()=>{
+      if (!cloudReady) { toast("未配置云端，无法同步"); return; }
+      toast("正在同步…");
+      try { await loadAll(); refresh(); toast("已同步 ☁️"); }
+      catch (e) { toast("同步失败，稍后自动重试"); }
+    });
+    // 切回页面时立即同步一次，体验更接近“实时”
+    document.addEventListener("visibilitychange", ()=>{ if (!document.hidden && cloudReady) { loadAll(true).then(()=>refresh()).catch(()=>{}); } });
     if (cloudReady) {
       updateCloudStatus("connecting");
       loadAll().then(()=>{ if(!MEM) MEM=bootstrapLocal(); startSyncPoll(); refresh(); }).catch(()=>{ if(!MEM) MEM=bootstrapLocal(); updateCloudStatus("error"); refresh(); });
+      // 即便首次拉取失败，也要启动轮询，否则会“永不同步”
+      if (!_pollTimer) startSyncPoll();
     }
     const _av = $("appVer"); if (_av) _av.textContent = "应用版本 "+APP_VER+"（两台手机需一致）";
     else { MEM = bootstrapLocal(); updateCloudStatus("offline"); refresh(); showConfigHint(); }
