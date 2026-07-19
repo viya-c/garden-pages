@@ -353,7 +353,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19c"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19d"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -662,9 +662,12 @@
       if (!cloudReady) { if (!MEM) { const l = readLocal(); MEM = l || bootstrapLocal(); recomputeGrowth(MEM); } return; }
       // 本地5秒内编辑过 → 跳过轮询合并，避免覆盖刚改的内容
       if ((Date.now() - _localEditAt) < 5000 && MEM) { return; }
+      const _editAtStart = _localEditAt; // 记录发起读取前的本地编辑时间
       if (!silent) updateCloudStatus("connecting");
       try {
         const remote = await githubRead();
+        // 读取期间本机发生过编辑（保存/打卡）→ 丢弃这次拉取结果，避免把旧数据覆盖回刚改的内容（修复“保存后立刻回退”）
+        if (_localEditAt !== _editAtStart) return;
         const base = MEM || readLocal() || bootstrapLocal();
         const merged = remote.store ? mergeStores(base, remote.store, _prev || settingsSnapshot(base)) : JSON.parse(JSON.stringify(base));
         MEM = merged; if (remote.store) _prev = settingsSnapshot(remote.store); recomputeGrowth(MEM);
