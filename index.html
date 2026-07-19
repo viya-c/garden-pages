@@ -261,6 +261,7 @@
           <div class="card-title">📱 云端同步状态 <span id="cloudStatus" style="font-size:13px;font-weight:600;padding:2px 8px;border-radius:999px;background:#fde9d0;color:#b08968;vertical-align:middle;">正在连接…</span></div>
           <p class="muted">本版本数据保存在 <b>GitHub 云端</b>，全家共享、自动同步。换手机或给爸爸用，直接打开同一个网址即可，无需导出导入（下方「导出备份」可作额外保险）。<br><span id="cloudStatusTip" style="color:#b08968;">请稍候，正在检测云端连接…</span></p>
           <button id="btnCloudRetry" class="btn-ghost" style="margin-top:8px;">🔄 重试连接</button>
+          <button id="btnReconfig" class="btn-ghost" style="margin-top:8px;margin-left:8px;">⚙️ 修改配置</button>
         </div>
         <div class="card">
           <div class="card-title">🗂️ 科目管理（大类）</div>
@@ -320,7 +321,7 @@
 
   <div id="setupModal" class="setup-modal hidden">
     <div class="setup-card">
-      <div class="setup-title">🌱 首次配置</div>
+      <div class="setup-title">🌱 云端配置</div>
       <p class="setup-tip">本应用用 <b>GitHub</b> 做云端同步（免费、国内可直连、无需代理/绑卡）。<b style="color:#e5484d;">全家手机请使用相同的令牌和仓库路径！</b>请输入：① <b>Token</b>（需勾选 <b>repo</b> 权限）；② 仓库路径 <b>viya-c/garden-data</b>。两者只存本机浏览器，不会上传。</p>
       <label class="field">GitHub 令牌 Token<input id="setupToken" type="text" placeholder="ghp_xxxxxxxxxxxx" /></label>
       <label class="field">仓库路径 owner/repo<input id="setupRepo" type="text" placeholder="viya-c/garden-data" /></label>
@@ -440,14 +441,14 @@
           if (/401|403/.test(m)) {
             updateCloudStatus("error");
             const tip = $("cloudStatusTip");
-            if (tip) tip.textContent = "写入被拒（401/403）：当前仓库=" + GH_REPO + "。请点「重试连接」→「首次配置」检查：①令牌是否有 repo 权限 ②仓库路径是否为 viya-c/garden-data。";
+            if (tip) tip.textContent = "写入被拒（401/403）：当前仓库=" + GH_REPO + "。请点下方「修改配置」检查：①令牌是否有 repo 权限 ②仓库路径是否为 viya-c/garden-data。";
             toast("⚠️ 写入被拒：检查令牌权限/仓库路径");
             return;
           }
           if (/404/.test(m)) {
             updateCloudStatus("error");
             const tip = $("cloudStatusTip");
-            if (tip) tip.textContent = "仓库不存在或无权访问（404）：当前配置仓库=" + GH_REPO + "。请确认：①用和主手机【完全相同】的令牌 ②仓库路径=viya-c/garden-data（区分大小写）。点「重试连接」→「首次配置」修改。";
+            if (tip) tip.textContent = "仓库不存在或无权访问（404）：当前配置仓库=" + GH_REPO + "。请确认：①用和主手机【完全相同】的令牌 ②仓库路径=viya-c/garden-data（区分大小写）。点下方「修改配置」修改。";
             toast("⚠️ 仓库找不到：请核对令牌和路径");
             return;
           }
@@ -481,7 +482,7 @@
         connecting: { t:"🔄 正在同步…", bg:"#fde9d0", c:"#b08968", tip:"正在与 GitHub 云端同步…" },
         online:     { t:"☁️ 云端已连接·已同步", bg:"#e3f5e3", c:"#2e7d32", tip:"数据已存到 GitHub 云端，全家共享，刷新不丢失。" },
         retry:      { t:"🔄 重连中…", bg:"#fde9d0", c:"#b08968", tip:"网络稍有波动，正在自动重试同步…" },
-        offline:    { t:"⚠️ 未连接·本地模式", bg:"#fde3e3", c:"#c62828", tip:"未配置 GitHub 云端，当前为本地模式——数据存本机（刷新不丢），但换设备不共享。点「重试连接」配置令牌。" },
+        offline:    { t:"⚠️ 未连接·本地模式", bg:"#fde3e3", c:"#c62828", tip:"未配置 GitHub 云端，当前为本地模式——数据存本机（刷新不丢），但换设备不共享。点「修改配置」填写令牌。" },
         error:      { t:"⚠️ 同步失败", bg:"#fde3e3", c:"#c62828", tip:"与 GitHub 云端同步失败，请检查网络或令牌后重试。" }
       };
       const s = map[state] || map.connecting;
@@ -1109,6 +1110,11 @@ function showBloom(species) {
       toast("正在重新连接云端…");
       try { await loadAll(); refresh(); startSyncPoll(); }
       catch (e) { /* 状态已由 loadAll 内部设置 */ }
+    });
+    const btnReconfig = $("btnReconfig");
+    if (btnReconfig) btnReconfig.addEventListener("click", ()=>{
+      // 随时可重新打开配置（修正令牌/仓库路径）
+      showConfigHint();
     });
     if (cloudReady) {
       updateCloudStatus("connecting");
