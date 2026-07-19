@@ -355,7 +355,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19f"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19g"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -449,6 +449,7 @@
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           const remote = await githubRead();
+          if (remote.store) normalizeIds(remote.store); // 归一词云 id 类型，保证与本地合并时 id 一致
           // 始终与云端最新数据做三路合并后写回：既能保留本机刚改的内容，也不会把另一台手机同时改的内容冲掉
           const toWrite = remote.store ? mergeStores(MEM, remote.store, _prev || settingsSnapshot(remote.store)) : JSON.parse(JSON.stringify(MEM));
           const sha = await githubWrite(toWrite, remote.sha);
@@ -664,10 +665,19 @@
     function store() { return MEM; }
     function save(s) { MEM = s; _localEditAt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} persistStore(); }
     function readLocal() {
-      try { const raw = localStorage.getItem(KEY); if (!raw) return null; const s = JSON.parse(raw); if (s && Array.isArray(s.categories)) { recomputeGrowth(s); return s; } } catch (e) {}
+      try { const raw = localStorage.getItem(KEY); if (!raw) return null; const s = JSON.parse(raw); if (s && Array.isArray(s.categories)) { normalizeIds(s); recomputeGrowth(s); return s; } } catch (e) {}
       return null;
     }
-    function bootstrapLocal() { const s = defaultStore(); recomputeGrowth(s); return s; }
+    function bootstrapLocal() { const s = defaultStore(); normalizeIds(s); recomputeGrowth(s); return s; }
+    // 统一把 id 归一为字符串：种子科目用数字 id(1,2,3,4)，用户新增科目用 UUID 字符串，
+    // 不归一化会导致 task.category_id 与 category.id 类型不一致（如 parseInt(UUID)=NaN），新科目无法关联任务。
+    function normalizeIds(s){
+      if(!s) return s;
+      (s.categories||[]).forEach(c=>{ if(c && c.id!=null) c.id = String(c.id); });
+      (s.tasks||[]).forEach(t=>{ if(t && t.category_id!=null) t.category_id = String(t.category_id); });
+      (s.checkins||[]).forEach(c=>{ if(c && c.task_id!=null) c.task_id = String(c.task_id); });
+      return s;
+    }
     function errText(e) {
       const m = (e && e.message) ? e.message : String(e);
       if (/abort|timeout/i.test(m)) return m + "（← 请求超时/被取消：GitHub 链路较慢，已自动重试；若仍失败可点上方「重试连接」）";
@@ -685,6 +695,7 @@
       if (!silent) updateCloudStatus("connecting");
       try {
         const remote = await githubRead();
+        if (remote.store) normalizeIds(remote.store); // 归一词云 id 类型，保证与本地合并时 id 一致
         // 读取期间本机发生过编辑（保存/打卡）→ 丢弃这次拉取结果，避免把旧数据覆盖回刚改的内容（修复“保存后立刻回退”）
         if (_localEditAt !== _editAtStart) return;
         const remoteSig = sigOf(remote.store);
@@ -1078,7 +1089,7 @@ function showBloom(species) {
       // 新增任务：默认带入上一次填写的常用值，减少重复输入（任务名称每次不同，留空待填）
       const seed = isNew ? Object.assign({}, _lastTask, task) : task;
       const overlay=document.createElement("div");
-      const catOpts=(CATEGORIES.length?CATEGORIES:[{id:seed.category_id||1,name:"未分类",emoji:"⭐"}]).map(c=>'<option value="'+c.id+'" '+(c.id===seed.category_id?"selected":"")+'>'+(c.emoji||"⭐")+' '+esc(c.name)+'</option>').join("");
+      const catOpts=(CATEGORIES.length?CATEGORIES:[{id:seed.category_id||1,name:"未分类",emoji:"⭐"}]).map(c=>'<option value="'+c.id+'" '+(String(c.id)===String(seed.category_id)?"selected":"")+'>'+(c.emoji||"⭐")+' '+esc(c.name)+'</option>').join("");
       const initDays=(seed.repeat_days?seed.repeat_days.split(",").map(Number):(seed.repeat_mode==="weekday"?[1,2,3,4,5]:[1,2,3,4,5,6,7]));
       const DAY_NAMES=["周一","周二","周三","周四","周五","周六","周日"];
       const dayBtns=[1,2,3,4,5,6,7].map(function(d){return '<button type="button" class="day-btn '+(initDays.indexOf(d)>=0?"active":"")+'" data-d="'+d+'">'+DAY_NAMES[d-1]+'</button>';}).join("");
@@ -1109,10 +1120,10 @@ function showBloom(species) {
       updValid();
       $("tmSave").addEventListener("click",()=>{
         const sel=[].slice.call(overlay.querySelectorAll(".day-btn.active")).map(b=>b.dataset.d);
-        const s=store(); const payload={ id:task.id, category_id:parseInt($("tmCat").value,10), name:$("tmName").value.trim()||"未命名", emoji:currentEmoji||"⭐", scheduled_time:$("tmTime").value||"09:00", duration:parseInt($("tmDur").value,10)||20, repeat_days:sel.join(",")||"1,2,3,4,5,6,7", active:$("tmActive").checked?1:0, start_date:$("tmStart").value||"", end_date:$("tmEnd").value||"" };
+        const s=store(); const payload={ id:task.id, category_id:String($("tmCat").value), name:$("tmName").value.trim()||"未命名", emoji:currentEmoji||"⭐", scheduled_time:$("tmTime").value||"09:00", duration:parseInt($("tmDur").value,10)||20, repeat_days:sel.join(",")||"1,2,3,4,5,6,7", active:$("tmActive").checked?1:0, start_date:$("tmStart").value||"", end_date:$("tmEnd").value||"" };
         if(task.id){ const t=s.tasks.find(x=>x.id===task.id); Object.assign(t,payload); } else { payload.id=crypto.randomUUID(); payload.sort_order=(s.tasks.filter(x=>x.category_id===payload.category_id).reduce((mx,x)=>Math.max(mx,(x.sort_order||0)),0))+1; s.tasks.push(payload); }
         // 记住本次填写的常用值，下次新增任务时默认带入
-        _lastTask = { category_id:payload.category_id, scheduled_time:payload.scheduled_time, duration:payload.duration, emoji:payload.emoji, repeat_days:payload.repeat_days, start_date:payload.start_date, end_date:payload.end_date, active:payload.active }; saveLastTask(_lastTask);
+        _lastTask = { category_id:String($("tmCat").value), scheduled_time:payload.scheduled_time, duration:payload.duration, emoji:payload.emoji, repeat_days:payload.repeat_days, start_date:payload.start_date, end_date:payload.end_date, active:payload.active }; saveLastTask(_lastTask);
         save(s); overlay.remove(); toast("已保存 ✅ 已同步云端，家人会看到"); refresh();
       });
     }
@@ -1153,7 +1164,7 @@ function showBloom(species) {
       $("btnExport").addEventListener("click",()=>{ const blob=new Blob([JSON.stringify(store(),null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="花园备份_"+todayStr()+".json"; a.click(); toast("已导出备份"); });
       $("btnShare").addEventListener("click",()=>{ const u=location.href; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(()=>toast("已复制网址，发给家人即可✅")).catch(()=>toast("复制失败，请手动复制："+u)); } else { toast("请手动复制本页网址："+u); } });
       $("btnImport").addEventListener("click",()=>$("importFile").click());
-      $("importFile").addEventListener("change",(e)=>{ const file=e.target.files[0]; if(!file) return; const rd=new FileReader(); rd.onload=()=>{ try { const data=JSON.parse(rd.result); if(!data.tasks) throw 0; if(!data.categories) data.categories=[]; if(!data.checkins) data.checkins=[]; if(!data.redemptions) data.redemptions=[]; [data.categories,data.tasks,data.checkins,data.redemptions].forEach(arr=>arr.forEach(r=>{ if(!r.id) r.id=crypto.randomUUID(); })); MEM=data; recomputeGrowth(MEM); _prev=null; persistStore(); momUnlocked=false; momPin=null; sessionStorage.removeItem("momPin"); toast("导入成功（已同步到云端）"); refresh(); } catch(err){ toast("文件格式不对"); } }; rd.readAsText(file); e.target.value=""; });
+      $("importFile").addEventListener("change",(e)=>{ const file=e.target.files[0]; if(!file) return; const rd=new FileReader(); rd.onload=()=>{ try { const data=JSON.parse(rd.result); if(!data.tasks) throw 0; if(!data.categories) data.categories=[]; if(!data.checkins) data.checkins=[]; if(!data.redemptions) data.redemptions=[]; [data.categories,data.tasks,data.checkins,data.redemptions].forEach(arr=>arr.forEach(r=>{ if(!r.id) r.id=crypto.randomUUID(); })); normalizeIds(data); MEM=data; recomputeGrowth(MEM); _prev=null; persistStore(); momUnlocked=false; momPin=null; sessionStorage.removeItem("momPin"); toast("导入成功（已同步到云端）"); refresh(); } catch(err){ toast("文件格式不对"); } }; rd.readAsText(file); e.target.value=""; });
       $("btnReset").addEventListener("click",()=>{ if(confirm("确定清空所有打卡与开花记录吗？（任务与设置保留）")){ const s=store(); s.checkins=[]; s.redemptions=[]; recomputeGrowth(s); save(s); toast("已清空"); refresh(); } });
     }
 
