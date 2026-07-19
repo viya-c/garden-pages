@@ -335,7 +335,7 @@
     // ===== Supabase 云端配置（多人实时，经 Cloudflare 代理）=====
     // 👇 经由 Cloudflare Worker 反向代理转发到 Supabase。
     //    内地手机直连 *.supabase.co 会被 DNS 污染（报“找不到服务器”），所以必须走这个代理地址。
-    const SUPABASE_URL = "https://garden.1032237642.workers.dev";
+    const SUPABASE_URL = "https://autumn-hat-6475.1032237642.workers.dev";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyc3VjdGt2dGJwYnBycHBoeWVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNTUzMjEsImV4cCI6MjA5OTkzMTMyMX0.v2m41m-VQcfMNO-YFIJEvhJrPGj5-T5NJf6eZVYp8Bs";
     const PROXY_URL = SUPABASE_URL; // 代理地址（用于一次性迁移本地旧配置）
     // 配置优先读浏览器本地（首次配置弹窗写入），其次才是源码里的常量
@@ -343,8 +343,10 @@
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
         let url = (c.url || SUPABASE_URL || "").trim();
-        // 一次性迁移：若浏览器本地曾存过被污染的 *.supabase.co 地址，自动改写为代理地址，无需手动重配
-        if (/\.supabase\.co$/i.test(url)) url = PROXY_URL;
+        // 一次性迁移：把本地存过的旧/错地址自动改写为当前正确的代理地址
+        //   - 被污染的 *.supabase.co
+        //   - 之前误填的 *.workers.dev（如改名前的 garden.1032237642.workers.dev）
+        if (/\.supabase\.co$/i.test(url) || (/workers\.dev$/i.test(url) && url !== PROXY_URL)) url = PROXY_URL;
         return { url, key: (c.key || SUPABASE_ANON_KEY || "").trim() };
       } catch (e) { return { url: "", key: "" }; }
     }
