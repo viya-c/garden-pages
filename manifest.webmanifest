@@ -1,0 +1,14 @@
+{
+  "name": "🌱 我的成长花园",
+  "short_name": "成长花园",
+  "description": "亲子打卡成长花园（GitHub 云端同步）",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3faf3",
+  "theme_color": "#7cc77c",
+  "icons": [
+    { "src": "icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
