@@ -63,13 +63,17 @@
     .progress-label { display: flex; justify-content: space-between; font-size: 13px; color: #7f947f; margin-bottom: 6px; }
     .progress { height: 12px; background: #e3f3e3; border-radius: 999px; overflow: hidden; }
     .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg,#9be39b,#4caa4c); border-radius: 999px; transition: width .4s ease; }
-    .task-list { display: flex; flex-direction: column; gap: 10px; }
-    .task-card { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); border-left: 8px solid var(--mint); cursor: pointer; transition: transform .12s ease; }
+    .task-list { display: flex; flex-direction: column; gap: 8px; }
+    .cat-header { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 14px; color: #5a7a5a; cursor: pointer; user-select: none; padding: 4px 2px; -webkit-tap-highlight-color: transparent; }
+    .cat-header .cat-toggle { font-size: 11px; transition: transform .2s ease; color: #9bb09b; width: 16px; text-align: center; flex-shrink: 0; }
+    .cat-header .cat-toggle.collapsed { transform: rotate(-90deg); }
+    .cat-body-collapsed { display: none; }
+    .task-card { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: var(--radius); padding: 9px 11px; box-shadow: var(--shadow); border-left: 7px solid var(--mint); cursor: pointer; transition: transform .12s ease; }
     .task-card:active { transform: scale(.98); }
-    .task-emoji { font-size: 34px; width: 46px; text-align: center; }
-    .task-main { flex: 1; }
-    .task-name { font-weight: 800; font-size: 17px; }
-    .task-time { font-size: 13px; color: #8fa38f; margin-top: 2px; }
+    .task-emoji { font-size: 28px; width: 38px; text-align: center; }
+    .task-main { flex: 1; min-width: 0; }
+    .task-name { font-weight: 800; font-size: 14.5px; line-height:1.25; }
+    .task-time { font-size: 12px; color: #8fa38f; margin-top: 1px; }
     .task-status { font-size: 12px; font-weight: 800; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
     .status-pending { background: #eef0f3; color: #8a93a0; }
     .status-normal { background: #d8f5e3; color: #1a9d54; }
@@ -317,7 +321,7 @@
   <div id="setupModal" class="setup-modal hidden">
     <div class="setup-card">
       <div class="setup-title">🌱 首次配置</div>
-      <p class="setup-tip">本应用用 <b>GitHub</b> 做云端同步（免费、国内可直连、无需代理/绑卡）。请输入：① <b>GitHub 个人令牌 Token</b>（需勾选 <b>repo</b> 权限）；② 存放数据的 <b>仓库路径</b>（格式 <b>owner/repo</b>，可与本应用同一仓库）。两者只存本机浏览器，不会上传。</p>
+      <p class="setup-tip">本应用用 <b>GitHub</b> 做云端同步（免费、国内可直连、无需代理/绑卡）。<b style="color:#e5484d;">全家手机请使用相同的令牌和仓库路径！</b>请输入：① <b>Token</b>（需勾选 <b>repo</b> 权限）；② 仓库路径 <b>viya-c/garden-data</b>。两者只存本机浏览器，不会上传。</p>
       <label class="field">GitHub 令牌 Token<input id="setupToken" type="text" placeholder="ghp_xxxxxxxxxxxx" /></label>
       <label class="field">仓库路径 owner/repo<input id="setupRepo" type="text" placeholder="viya-c/garden-data" /></label>
       <button id="setupSave" class="btn-primary">保存并进入</button>
@@ -407,13 +411,21 @@
     function settingsSnapshot(s){ return { categories:s.categories, tasks:s.tasks, checkins:s.checkins, redemptions:s.redemptions, settings: settingsRec(s) }; }
     let _syncTimer = null;
     let _syncFails = 0;
+    let _localEditAt = 0; // 最近一次本地编辑的时间戳，防止轮询立即覆盖
     async function syncNow() {
       if (!cloudReady || !MEM) return;
+      const justEdited = (Date.now() - _localEditAt) < 5000; // 本地5秒内编辑过
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           const remote = await githubRead();
-          const merged = remote.store ? mergeStores(MEM, remote.store, _prev || settingsSnapshot(remote.store)) : JSON.parse(JSON.stringify(MEM));
-          const sha = await githubWrite(merged, remote.sha);
+          let toWrite;
+          if (justEdited) {
+            // 刚编辑过：直接用本机最新数据写上去，不做合并（避免合并逻辑误判覆盖）
+            toWrite = JSON.parse(JSON.stringify(MEM));
+          } else {
+            toWrite = remote.store ? mergeStores(MEM, remote.store, _prev || settingsSnapshot(remote.store)) : JSON.parse(JSON.stringify(MEM));
+          }
+          const sha = await githubWrite(toWrite, remote.sha);
           MEM = merged; _prev = settingsSnapshot(merged);
           recomputeGrowth(MEM);
           try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
@@ -428,8 +440,15 @@
           if (/401|403/.test(m)) {
             updateCloudStatus("error");
             const tip = $("cloudStatusTip");
-            if (tip) tip.textContent = "写入被拒（401/403）：请点「重试连接」检查①令牌是否有 repo 权限 ②仓库路径是否为 viya-c/garden-data。";
+            if (tip) tip.textContent = "写入被拒（401/403）：当前仓库=" + GH_REPO + "。请点「重试连接」→「首次配置」检查：①令牌是否有 repo 权限 ②仓库路径是否为 viya-c/garden-data。";
             toast("⚠️ 写入被拒：检查令牌权限/仓库路径");
+            return;
+          }
+          if (/404/.test(m)) {
+            updateCloudStatus("error");
+            const tip = $("cloudStatusTip");
+            if (tip) tip.textContent = "仓库不存在或无权访问（404）：当前配置仓库=" + GH_REPO + "。请确认：①用和主手机【完全相同】的令牌 ②仓库路径=viya-c/garden-data（区分大小写）。点「重试连接」→「首次配置」修改。";
+            toast("⚠️ 仓库找不到：请核对令牌和路径");
             return;
           }
           // 其余（网络抖动等）按指数退避重试，不直接报警
@@ -477,6 +496,15 @@
     let STATE = null, STATS = null, CATEGORIES = [];
     let momPin = sessionStorage.getItem("momPin") || null;
     let momUnlocked = !!momPin;
+    // 折叠状态（按科目ID，存sessionStorage跨刷新保留）
+    const COLLAPSED_KEY = "gg_collapsed";
+    let _collapsedSet = new Set((sessionStorage.getItem(COLLAPSED_KEY)||"").split(",").filter(Boolean));
+    function toggleCollapse(catId) {
+      if (_collapsedSet.has(catId)) { _collapsedSet.delete(catId); }
+      else { _collapsedSet.add(catId); }
+      sessionStorage.setItem(COLLAPSED_KEY, [..._collapsedSet].join(","));
+      refresh();
+    }
 
     // ---------- 花朵 SVG 为每种花手绘插画（见 FLOWERS 各条目的 svg） ----------
         const FLOWERS = {
@@ -606,7 +634,7 @@
     // ===== 数据层（本地 + GitHub 云端同步，无代理、无绑卡、国内直连）=====
     let MEM = null, _prev = null, _rtTimer = null;
     function store() { return MEM; }
-    function save(s) { MEM = s; try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} persistStore(); }
+    function save(s) { MEM = s; _localEditAt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} persistStore(); }
     function readLocal() {
       try { const raw = localStorage.getItem(KEY); if (!raw) return null; const s = JSON.parse(raw); if (s && Array.isArray(s.categories)) { recomputeGrowth(s); return s; } } catch (e) {}
       return null;
@@ -623,6 +651,8 @@
     }
     async function loadAll(silent) {
       if (!cloudReady) { if (!MEM) { const l = readLocal(); MEM = l || bootstrapLocal(); recomputeGrowth(MEM); } return; }
+      // 本地5秒内编辑过 → 跳过轮询合并，避免覆盖刚改的内容
+      if ((Date.now() - _localEditAt) < 5000 && MEM) { return; }
       if (!silent) updateCloudStatus("connecting");
       try {
         const remote = await githubRead();
@@ -782,9 +812,13 @@
       let anyTask=false;
       STATE.categories.forEach(cat=>{
         if(!cat.tasks.length) return; anyTask=true;
+        const collapsed = _collapsedSet.has(String(cat.id));
         const header=document.createElement("div"); header.className="cat-header";
-        header.innerHTML='<span class="cat-emoji">'+(cat.emoji||"⭐")+'</span><span class="cat-name">'+esc(cat.name)+'</span>';
+        const toggleCls = collapsed ? "cat-toggle collapsed" : "cat-toggle";
+        header.innerHTML='<span class="'+toggleCls+'">▾</span><span class="cat-emoji">'+(cat.emoji||"⭐")+'</span><span class="cat-name">'+esc(cat.name)+' <small style="font-weight:400;color:#9bb09b;font-size:12px;">('+cat.tasks.length+')</small></span>';
+        header.addEventListener("click",()=>{ toggleCollapse(cat.id); });
         list.appendChild(header);
+        if (collapsed) return; // 折叠时不渲染任务
         cat.tasks.forEach(t=>{
           const st=taskDisplay(t,now); const done=!!t.checkin;
           const by = done && t.checkin.checked_by ? t.checkin.checked_by : "";
@@ -931,11 +965,16 @@ function showBloom(species) {
       const matched=s.tasks.filter(t=>cats.some(c=>c.id===t.category_id));
       const orphan=s.tasks.filter(t=>!cats.some(c=>c.id===t.category_id));
       cats.forEach(c=>{
-        const head=document.createElement("div"); head.style.cssText="font-weight:700;font-size:14px;color:#7a5c3e;margin:10px 2px 4px;display:flex;align-items:center;gap:6px;";
-        head.innerHTML='<span>'+(c.emoji||"⭐")+'</span>'+esc(c.name)+(c.active?"":"（已停用）");
+        const collapsed = _collapsedSet.has(String(c.id));
+        const head=document.createElement("div");
+        head.style.cssText="font-weight:700;font-size:14px;color:#7a5c3e;margin:8px 2px 4px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;";
+        const arrow = collapsed ? "▸" : "▾";
+        head.innerHTML='<span style="font-size:11px;color:#b08968;width:16px;text-align:center;">'+arrow+'</span><span>'+(c.emoji||"⭐")+'</span>'+esc(c.name)+(c.active?"":"（已停用）")+' <small style="font-weight:400;color:#9bb09b;font-size:12px;">('+matched.filter(t=>t.category_id===c.id).length+')</small>';
+        head.addEventListener("click",()=>{ toggleCollapse(c.id); });
         box.appendChild(head);
+        if (collapsed) return;
         const ctasks=matched.filter(t=>t.category_id===c.id).sort((a,b)=>(a.scheduled_time||"").localeCompare(b.scheduled_time||"")||((a.sort_order||0)-(b.sort_order||0))||(String(a.id)<String(b.id)?-1:1));
-        if(!ctasks.length){ const empty=document.createElement("div"); empty.style.cssText="color:#b08968;font-size:13px;padding:2px 2px 6px;"; empty.textContent="（暂无任务）"; box.appendChild(empty); return; }
+        if(!ctasks.length){ const empty=document.createElement("div"); empty.style.cssText="color:#b08968;font-size:12px;padding:2px 6px 6px;"; empty.textContent="（暂无任务）"; box.appendChild(empty); return; }
         ctasks.forEach(t=>{
           const it=document.createElement("div"); it.className="manage-item task-item";
           it.innerHTML='<div class="mi-top"><span class="mi-emoji">'+(t.emoji||"⭐")+'</span><span class="mi-name">'+esc(t.name)+'</span><span class="mi-actions"><button class="mi-btn">编辑</button><button class="mi-btn mi-del">删</button></span></div><div class="mi-time">'+t.scheduled_time+' · '+repeatLabel(t)+taskValidSuffix(t)+(t.active?"":" · 已停用")+'</div>';
