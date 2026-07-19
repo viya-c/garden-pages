@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#7cc77c" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>🌱 我的成长花园（GitHub 云端同步版）</title>
   
   <style>
@@ -269,6 +272,7 @@
           <p class="muted">本版本数据保存在 <b>GitHub 云端</b>，全家共享、自动同步。换手机或给爸爸用，直接打开同一个网址即可，无需导出导入（下方「导出备份」可作额外保险）。<br><span id="cloudStatusTip" style="color:#b08968;">请稍候，正在检测云端连接…</span></p>
           <button id="btnCloudRetry" class="btn-ghost" style="margin-top:8px;">🔄 重试连接</button>
           <button id="btnReconfig" class="btn-ghost" style="margin-top:8px;margin-left:8px;">⚙️ 修改配置</button>
+          <div id="appVer" style="font-size:11px;color:#c2c2c2;margin-top:8px;">应用版本加载中…</div>
         </div>
         <div class="card">
           <div class="card-title">🗂️ 科目管理（大类）</div>
@@ -348,6 +352,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
+    const APP_VER = "2026-07-19b"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -942,7 +947,9 @@ function showBloom(species) {
         const title=card.querySelector(".card-title"); if(!title) return;
         const arrow=document.createElement("span"); arrow.className="mom-arrow"; arrow.textContent="▾"; title.insertBefore(arrow, title.firstChild);
         const body=document.createElement("div"); body.className="mom-body";
-        while(card.firstChild!==title){ body.appendChild(card.firstChild); }
+        // 把标题【之后】的所有兄弟节点移入折叠容器（关键：要藏的是标题下方的内容）
+        let n=title.nextSibling;
+        while(n){ const nx=n.nextSibling; body.appendChild(n); n=nx; }
         card.appendChild(body);
         title.addEventListener("click",function(){ card.classList.toggle("collapsed"); });
       });
@@ -1161,6 +1168,7 @@ function showBloom(species) {
       updateCloudStatus("connecting");
       loadAll().then(()=>{ if(!MEM) MEM=bootstrapLocal(); startSyncPoll(); refresh(); }).catch(()=>{ if(!MEM) MEM=bootstrapLocal(); updateCloudStatus("error"); refresh(); });
     }
+    const _av = $("appVer"); if (_av) _av.textContent = "应用版本 "+APP_VER+"（两台手机需一致）";
     else { MEM = bootstrapLocal(); updateCloudStatus("offline"); refresh(); showConfigHint(); }
   })();
   </script>
