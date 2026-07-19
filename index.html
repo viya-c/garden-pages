@@ -370,7 +370,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19l"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19m"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -1222,10 +1222,14 @@ function showBloom(species) {
         if(s.flowers.length - s.redemptions.filter(r=>r.type==="point"&&r.status==="approved").reduce((a,r)=>a+r.amount,0) - s.redemptions.filter(r=>r.type==="point"&&r.status==="pending").reduce((a,r)=>a+r.amount,0) < fpr){ toast("花朵不足，需集满 "+fpr+" 朵"); return; }
         s.redemptions.push({ id:crypto.randomUUID(), type:"point", amount:fpr, points:ppr, status:"pending", created_at:new Date().toISOString() }); save(s); toast("已向妈妈申请兑换~"); refresh();
       });
-      // PIN 解锁：用 form 的 submit 作为主路径（iOS 在键盘开启时对“提交表单”也能可靠触发，
-      // 不会被系统拿去先收键盘而吞掉点击）；再补 touchend 兜底，覆盖主屏独立模式的点击异常
+      // PIN 解锁：多重保险，确保 iOS 主屏独立模式也能解锁
+      // ① 输对即自动解锁（最关键：完全不依赖点按钮，绕开“键盘开着时点进入被系统吞掉”的问题）
       const pinForm=$("pinForm"); if(pinForm) pinForm.addEventListener("submit",(e)=>{ e.preventDefault(); tryUnlockPin(); });
-      const pinInputEl=$("pinInput"); if(pinInputEl) pinInputEl.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); tryUnlockPin(); } });
+      const pinInputEl=$("pinInput");
+      if(pinInputEl){
+        pinInputEl.addEventListener("input",()=>{ if(verifyPin(pinInputEl.value)) tryUnlockPin(); });
+        pinInputEl.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); tryUnlockPin(); } });
+      }
       const btnPinOkEl=$("btnPinOk"); if(btnPinOkEl) btnPinOkEl.addEventListener("touchend",(e)=>{ e.preventDefault(); e.stopPropagation(); tryUnlockPin(); });
       $("btnAddTask").addEventListener("click",()=>openTaskModal(null));
       $("btnAddCat").addEventListener("click",()=>openCatModal(null));
@@ -1300,6 +1304,8 @@ function showBloom(species) {
     // （修复：主屏图标会长期缓存旧版 HTML，导致功能“回退/无反应”）
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+      // 新版本 SW 接管时自动刷新一次页面，保证主屏图标拿到最新代码（iOS 16.4+ 支持）
+      navigator.serviceWorker.addEventListener("controllerchange", function () { window.location.reload(); });
     }
     // 版本自检：本次版本与上次不同（通常是主屏图标缓存了旧版）→ 提示刷新/重新添加
     try {
