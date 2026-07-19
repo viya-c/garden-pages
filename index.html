@@ -317,8 +317,8 @@
   <div id="setupModal" class="setup-modal hidden">
     <div class="setup-card">
       <div class="setup-title">🌱 首次配置</div>
-      <p class="setup-tip">把 Supabase 的 <b>Project URL</b> 和 <b>anon public key</b> 粘贴进来（不会上传，只存在本机浏览器）。详见「部署步骤.md」第 3 步。</p>
-      <label class="field">Project URL<input id="setupUrl" type="text" placeholder="https://xxxx.supabase.co" /></label>
+      <p class="setup-tip">已默认配置好 Cloudflare 代理地址，通常无需修改。如需自建后端，可把 <b>Project URL</b> 和 <b>anon public key</b> 粘贴进来（只存在本机浏览器）。详见「部署步骤.md」。</p>
+      <label class="field">Project URL（代理地址）<input id="setupUrl" type="text" placeholder="https://xxxx.workers.dev" /></label>
       <label class="field">anon public key<input id="setupKey" type="text" placeholder="eyJhbGci..." /></label>
       <button id="setupSave" class="btn-primary">保存并进入</button>
       <div id="setupErr" class="hidden" style="color:#e5484d;font-size:13px;margin-top:6px;"></div>
@@ -332,12 +332,22 @@
     const $ = (id) => document.getElementById(id);
     const WEEK = ["周日","周一","周二","周三","周四","周五","周六"];
     const KEY = "growth_garden_v1";
-    // ===== Supabase 云端配置（多人实时）=====
-    // 👇 把下面的两个值换成你自己的 Supabase 项目信息（详见同目录「部署步骤.md」）
-    const SUPABASE_URL = "https://crsuctkvtbpbprpphyel.supabase.com";
+    // ===== Supabase 云端配置（多人实时，经 Cloudflare 代理）=====
+    // 👇 经由 Cloudflare Worker 反向代理转发到 Supabase。
+    //    内地手机直连 *.supabase.co 会被 DNS 污染（报“找不到服务器”），所以必须走这个代理地址。
+    const SUPABASE_URL = "https://garden.1032237642.workers.dev";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyc3VjdGt2dGJwYnBycHBoeWVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNTUzMjEsImV4cCI6MjA5OTkzMTMyMX0.v2m41m-VQcfMNO-YFIJEvhJrPGj5-T5NJf6eZVYp8Bs";
+    const PROXY_URL = SUPABASE_URL; // 代理地址（用于一次性迁移本地旧配置）
     // 配置优先读浏览器本地（首次配置弹窗写入），其次才是源码里的常量
-    function readConfig() { try { const c = JSON.parse(localStorage.getItem("gg_config") || "{}"); return { url: (c.url || SUPABASE_URL || "").trim(), key: (c.key || SUPABASE_ANON_KEY || "").trim() }; } catch (e) { return { url: "", key: "" }; } }
+    function readConfig() {
+      try {
+        const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
+        let url = (c.url || SUPABASE_URL || "").trim();
+        // 一次性迁移：若浏览器本地曾存过被污染的 *.supabase.co 地址，自动改写为代理地址，无需手动重配
+        if (/\.supabase\.co$/i.test(url)) url = PROXY_URL;
+        return { url, key: (c.key || SUPABASE_ANON_KEY || "").trim() };
+      } catch (e) { return { url: "", key: "" }; }
+    }
     const _cfg = readConfig();
     // 云端就绪判定 + 直接 REST 访问（不再依赖 supabase-js 库，避免该库在部分手机上异常导致“云端返回错误”）
     const cloudReady = !!(_cfg.url && _cfg.key);
@@ -366,7 +376,7 @@
       const map = {
         connecting: { t:"🔄 正在连接云端…", bg:"#fde9d0", c:"#b08968", tip:"正在连接 Supabase 云端…" },
         online:     { t:"☁️ 云端已连接·已同步", bg:"#e3f5e3", c:"#2e7d32", tip:"数据已与云端同步，全家共享，刷新不丢失。" },
-        offline:    { t:"⚠️ 未连接·本地模式", bg:"#fde3e3", c:"#c62828", tip:"云端未连接，当前为本地模式——数据会自动存在本机（刷新不丢），但换设备/换浏览器不会同步。在能访问 supabase.co 的网络下会自动改为云端同步。" },
+        offline:    { t:"⚠️ 未连接·本地模式", bg:"#fde3e3", c:"#c62828", tip:"云端未连接，当前为本地模式——数据会自动存在本机（刷新不丢），但换设备/换浏览器不会同步。已通过 Cloudflare 代理直连云端，请检查网络后刷新重试。" },
         error:      { t:"⚠️ 同步失败", bg:"#fde3e3", c:"#c62828", tip:"与云端同步失败，请检查网络后刷新重试。" }
       };
       const s = map[state] || map.connecting;
@@ -542,7 +552,7 @@
       if(e&&e.error) return supaErrText({error:e.error});
       if(e&&(e.code||e.message)) return [e.code,e.message,e.details,e.hint].filter(Boolean).join(" | ");
       const m=(e&&e.message)?e.message:String(e);
-      if(/failed to fetch|networkerror|timeout|abort/i.test(m)) return m+"（← 看起来是网络连不上 supabase.co）";
+      if(/failed to fetch|networkerror|timeout|abort/i.test(m)) return m+"（← 看起来是网络连不上云端代理 workers.dev）";
       if(/permission|rls|denied|42501|pgrst/i.test(m)) return m+"（← 看起来是权限/RLS 策略问题）";
       return m;
     }
