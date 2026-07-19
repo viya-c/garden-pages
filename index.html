@@ -355,7 +355,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19h"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19i"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -410,7 +410,8 @@
             else if (JSON.stringify(r) === JSON.stringify(p)) out.push(l); // 云端未改 → 用本机
             else out.push(l);                                          // 两边都改（罕见）→ 本机优先
           } else if (l && !r) {
-            out.push(l);                                              // 本机保留/改了，云端却删了 → 本机优先保留
+            // 本机有、云端已删：若本机自祖先以来没改过 → 接受删除（让家人的删除同步过来）；改过则保留本机
+            if (JSON.stringify(l) !== JSON.stringify(p)) out.push(l);
           } else if (!l && r) {
             if (JSON.stringify(r) === JSON.stringify(p)) { /* 本机删了、云端没动过 → 真删除，不保留 */ }
             else out.push(r);                                         // 本机删了、但云端改过 → 保留云端，避免误删家人修改
@@ -434,6 +435,17 @@
         checkins: mergeArray(local.checkins, remote.checkins, prev.checkins),
         redemptions: mergeArray(local.redemptions, remote.redemptions, prev.redemptions)
       };
+      // 打卡记录按 (task_id,date) 收敛为一条：双机/多次打卡只保留 checked_at 最新的一条，避免重复与撤销失效
+      if (m.checkins && m.checkins.length) {
+        const pool = [...(local.checkins||[]), ...(remote.checkins||[]), ...m.checkins];
+        const seen = new Map();
+        pool.forEach(c => {
+          const k = (c.task_id!=null?c.task_id:"") + "|" + (c.date||"");
+          const ex = seen.get(k);
+          if (!ex || (c.checked_at||"") > (ex.checked_at||"")) seen.set(k, c);
+        });
+        m.checkins = [...seen.values()];
+      }
       applySettings(m, mergeArray([settingsRec(local)], [settingsRec(remote)], [settingsRec(prev)])[0]);
       return m;
     }
@@ -900,8 +912,8 @@
       const ref = curDate===today ? new Date() : (curDate<today ? new Date(Y, Mo-1, D, 23, 59, 59) : new Date(Y, Mo-1, D, 0, 0, 0));
       const status = ref<=deadline ? "done_normal":"done_late";
       const s=store(); const idx=s.checkins.findIndex(c=>c.task_id===t.id && c.date===curDate);
-      // 复用同一天同任务的已有记录 id：避免重复生成随机 id 导致合并时出现两条打卡记录（表现为“撤销/补打后又回来”）
-      const rec={ id: idx>=0 ? s.checkins[idx].id : crypto.randomUUID(), task_id:t.id, date:curDate, status, checked_at:new Date().toISOString(), checked_by:role };
+      // id 用 “task_id__date” 确定性生成：同一天同任务在双机/多次打卡都是同一条记录，合并天然去重、撤销可靠
+      const rec={ id: String(t.id)+"__"+curDate, task_id:t.id, date:curDate, status, checked_at:new Date().toISOString(), checked_by:role };
       if(idx>=0) s.checkins[idx]=rec; else s.checkins.push(rec);
       const before=s.flowers.length; save(s); rebuildGrowth();
       const after=store().flowers.length;
