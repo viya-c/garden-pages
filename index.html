@@ -353,7 +353,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19d"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19e"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -422,7 +422,7 @@
       applySettings(m, mergeArray([settingsRec(local)], [settingsRec(remote)], [settingsRec(prev)])[0]);
       return m;
     }
-    function settingsSnapshot(s){ return { categories:s.categories, tasks:s.tasks, checkins:s.checkins, redemptions:s.redemptions, settings: settingsRec(s) }; }
+    function settingsSnapshot(s){ return { categories:(s.categories||[]).map(x=>({...x})), tasks:(s.tasks||[]).map(x=>({...x})), checkins:(s.checkins||[]).map(x=>({...x})), redemptions:(s.redemptions||[]).map(x=>({...x})), settings: settingsRec(s) }; } // 每个元素浅拷贝：断开与 MEM/remote 的对象别名，避免就地修改污染 _prev 导致合并回退
     let _syncTimer = null;
     let _syncFails = 0;
     let _localEditAt = 0; // 最近一次本地编辑的时间戳，防止轮询立即覆盖
