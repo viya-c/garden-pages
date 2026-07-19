@@ -34,7 +34,7 @@
     .muted { color: #9bb09b; font-size: 13px; }
     .err { color: #e5484d; font-size: 13px; margin-top: 8px; }
     .topbar { position: sticky; top: 0; z-index: 20; flex-shrink: 0; background: linear-gradient(135deg,var(--green),var(--mint));
-      color: #fff; padding: 12px 16px 10px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow); }
+      color: #fff; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 10px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow); }
     .brand { font-weight: 800; font-size: 18px; text-shadow: 0 1px 2px rgba(0,0,0,.1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .role-switch { display: flex; gap: 3px; background: rgba(255,255,255,.25); padding: 3px; border-radius: 999px; flex-shrink: 0; }
     .role-switch button { border: none; background: transparent; color: #fff; font-weight: 700; padding: 6px 10px; border-radius: 999px; font-size: 13px; cursor: pointer; white-space: nowrap; }
@@ -370,7 +370,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19m"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19n"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
