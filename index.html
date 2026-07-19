@@ -427,7 +427,7 @@
             toWrite = remote.store ? mergeStores(MEM, remote.store, _prev || settingsSnapshot(remote.store)) : JSON.parse(JSON.stringify(MEM));
           }
           const sha = await githubWrite(toWrite, remote.sha);
-          MEM = merged; _prev = settingsSnapshot(merged);
+          MEM = toWrite; _prev = settingsSnapshot(toWrite);
           recomputeGrowth(MEM);
           try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
           _syncFails = 0;
@@ -1003,28 +1003,38 @@ function showBloom(species) {
       const max=Math.max(1,...STATS.trend.map(t=>t.flowers)); const chart=$("trendChart"); chart.innerHTML="";
       STATS.trend.forEach(t=>{ const col=document.createElement("div"); col.className="trend-col"; const h=(t.flowers/max)*90; col.innerHTML='<div class="trend-num">'+(t.flowers||"")+'</div><div class="trend-bar" style="height:'+Math.max(t.flowers?6:2,h)+'px"></div><div class="trend-day">'+t.date.slice(5).replace("-","/")+'</div>'; chart.appendChild(col); });
     }
+    // 新增任务时记住上一次填写的常用值（科目/时间/时长/图标/重复/日期），刷新后仍保留，减少重复输入
+    const _ltKey = "gg_lasttask";
+    const _lastTaskDef = { category_id:null, scheduled_time:"09:00", duration:20, emoji:null, repeat_days:"1,2,3,4,5,6,7", start_date:"", end_date:"", active:1 };
+    function loadLastTask(){ try { const v = localStorage.getItem(_ltKey); if (v) return Object.assign({}, _lastTaskDef, JSON.parse(v)); } catch (e) {} return Object.assign({}, _lastTaskDef); }
+    function saveLastTask(o){ try { localStorage.setItem(_ltKey, JSON.stringify(o)); } catch (e) {} }
+    let _lastTask = loadLastTask();
     function openTaskModal(task) {
-      task=task||{}; const overlay=document.createElement("div");
-      const catOpts=(CATEGORIES.length?CATEGORIES:[{id:task.category_id||1,name:"未分类",emoji:"⭐"}]).map(c=>'<option value="'+c.id+'" '+(c.id===task.category_id?"selected":"")+'>'+(c.emoji||"⭐")+' '+esc(c.name)+'</option>').join("");
-      const initDays=(task.repeat_days?task.repeat_days.split(",").map(Number):(task.repeat_mode==="weekday"?[1,2,3,4,5]:[1,2,3,4,5,6,7]));
+      task=task||{};
+      const isNew = !task.id;
+      // 新增任务：默认带入上一次填写的常用值，减少重复输入（任务名称每次不同，留空待填）
+      const seed = isNew ? Object.assign({}, _lastTask, task) : task;
+      const overlay=document.createElement("div");
+      const catOpts=(CATEGORIES.length?CATEGORIES:[{id:seed.category_id||1,name:"未分类",emoji:"⭐"}]).map(c=>'<option value="'+c.id+'" '+(c.id===seed.category_id?"selected":"")+'>'+(c.emoji||"⭐")+' '+esc(c.name)+'</option>').join("");
+      const initDays=(seed.repeat_days?seed.repeat_days.split(",").map(Number):(seed.repeat_mode==="weekday"?[1,2,3,4,5]:[1,2,3,4,5,6,7]));
       const DAY_NAMES=["周一","周二","周三","周四","周五","周六","周日"];
       const dayBtns=[1,2,3,4,5,6,7].map(function(d){return '<button type="button" class="day-btn '+(initDays.indexOf(d)>=0?"active":"")+'" data-d="'+d+'">'+DAY_NAMES[d-1]+'</button>';}).join("");
-      const initCatId=task.category_id||(CATEGORIES.length?CATEGORIES[0].id:1);
+      const initCatId=seed.category_id||(CATEGORIES.length?CATEGORIES[0].id:1);
       const catEmoji=function(id){const c=CATEGORIES.find(function(x){return x.id===id;});return c?c.emoji:"⭐";};
-      let currentEmoji=task.emoji||catEmoji(initCatId);
+      let currentEmoji=seed.emoji||catEmoji(initCatId);
       overlay.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;display:flex;align-items:flex-end;justify-content:center;";
-      overlay.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;"><div style="font-weight:800;font-size:17px;margin-bottom:12px;">'+(task.id?"编辑任务":"添加任务")+'</div>'+
-        '<label class="field">任务名称<input id="tmName" type="text" value="'+esc(task.name||"")+'" placeholder="如：数学"></label>'+
+      overlay.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;"><div style="font-weight:800;font-size:17px;margin-bottom:12px;">'+(isNew?"添加任务":"编辑任务")+'</div>'+
+        '<label class="field">任务名称<input id="tmName" type="text" value="'+esc(seed.name||"")+'" placeholder="如：数学"></label>'+
         '<label class="field">图标（点选，默认与科目一致）<input id="tmEmoji" type="text" value="'+esc(currentEmoji)+'" maxlength="4" style="text-align:center;font-size:18px;"></label>'+
         '<div id="tmIcons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">'+PRESET_ICONS.map(function(e){return '<button type="button" class="ic-btn '+(e===currentEmoji?"active":"")+'" data-e="'+e+'">'+e+'</button>';}).join("")+'</div>'+
         '<label class="field">所属科目<select id="tmCat">'+catOpts+'</select></label>'+
-        '<label class="field">计划时间<input id="tmTime" type="time" value="'+esc(task.scheduled_time||"09:00")+'"></label>'+
-        '<label class="field">时长（分钟）<input id="tmDur" type="number" min="1" value="'+(task.duration||20)+'"></label>'+
-        '<label class="field">开始日期<input id="tmStart" type="date" min="'+todayStr()+'" value="'+esc(task.start_date||"")+'"></label>'+
-        '<label class="field">结束日期（可留空＝长期）<input id="tmEnd" type="date" min="'+esc(task.start_date||todayStr())+'" value="'+esc(task.end_date||"")+'"></label>'+
+        '<label class="field">计划时间<input id="tmTime" type="time" value="'+esc(seed.scheduled_time||"09:00")+'"></label>'+
+        '<label class="field">时长（分钟）<input id="tmDur" type="number" min="1" value="'+(seed.duration||20)+'"></label>'+
+        '<label class="field">开始日期<input id="tmStart" type="date" min="'+todayStr()+'" value="'+esc(seed.start_date||"")+'"></label>'+
+        '<label class="field">结束日期（可留空＝长期）<input id="tmEnd" type="date" min="'+esc(seed.start_date||todayStr())+'" value="'+esc(seed.end_date||"")+'"></label>'+
         '<div id="tmValid" class="valid-hint"></div>'+
         '<label class="field">重复（点选星期几）<div id="tmDays" class="day-toggles">'+dayBtns+'</div><div class="day-quick"><button type="button" id="tmAll" class="day-quick-btn">每天</button><button type="button" id="tmWork" class="day-quick-btn">仅工作日</button></div></label>'+
-        '<label class="field" style="display:flex;align-items:center;gap:8px;"><input id="tmActive" type="checkbox" '+(task.active!==0?"checked":"")+' style="width:auto;"> 启用该任务</label>'+
+        '<label class="field" style="display:flex;align-items:center;gap:8px;"><input id="tmActive" type="checkbox" '+(seed.active!==0?"checked":"")+' style="width:auto;"> 启用该任务</label>'+
         '<div style="display:flex;gap:10px;margin-top:6px;"><button id="tmCancel" class="btn-ghost">取消</button><button id="tmSave" class="btn-primary">保存</button></div></div>';
       document.body.appendChild(overlay);
       overlay.addEventListener("click",(e)=>{ if(e.target===overlay) overlay.remove(); });
@@ -1042,6 +1052,8 @@ function showBloom(species) {
         const sel=[].slice.call(overlay.querySelectorAll(".day-btn.active")).map(b=>b.dataset.d);
         const s=store(); const payload={ id:task.id, category_id:parseInt($("tmCat").value,10), name:$("tmName").value.trim()||"未命名", emoji:currentEmoji||"⭐", scheduled_time:$("tmTime").value||"09:00", duration:parseInt($("tmDur").value,10)||20, repeat_days:sel.join(",")||"1,2,3,4,5,6,7", active:$("tmActive").checked?1:0, start_date:$("tmStart").value||"", end_date:$("tmEnd").value||"" };
         if(task.id){ const t=s.tasks.find(x=>x.id===task.id); Object.assign(t,payload); } else { payload.id=crypto.randomUUID(); payload.sort_order=(s.tasks.filter(x=>x.category_id===payload.category_id).reduce((mx,x)=>Math.max(mx,(x.sort_order||0)),0))+1; s.tasks.push(payload); }
+        // 记住本次填写的常用值，下次新增任务时默认带入
+        _lastTask = { category_id:payload.category_id, scheduled_time:payload.scheduled_time, duration:payload.duration, emoji:payload.emoji, repeat_days:payload.repeat_days, start_date:payload.start_date, end_date:payload.end_date, active:payload.active }; saveLastTask(_lastTask);
         save(s); overlay.remove(); toast("已保存"); refresh();
       });
     }
