@@ -355,7 +355,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19g"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19h"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -674,8 +674,9 @@
     function normalizeIds(s){
       if(!s) return s;
       (s.categories||[]).forEach(c=>{ if(c && c.id!=null) c.id = String(c.id); });
-      (s.tasks||[]).forEach(t=>{ if(t && t.category_id!=null) t.category_id = String(t.category_id); });
-      (s.checkins||[]).forEach(c=>{ if(c && c.task_id!=null) c.task_id = String(c.task_id); });
+      (s.tasks||[]).forEach(t=>{ if(t){ if(t.id!=null) t.id = String(t.id); if(t.category_id!=null) t.category_id = String(t.category_id); } });
+      (s.checkins||[]).forEach(c=>{ if(c){ if(c.id!=null) c.id = String(c.id); if(c.task_id!=null) c.task_id = String(c.task_id); } });
+      (s.redemptions||[]).forEach(r=>{ if(r && r.id!=null) r.id = String(r.id); });
       return s;
     }
     function errText(e) {
@@ -899,7 +900,8 @@
       const ref = curDate===today ? new Date() : (curDate<today ? new Date(Y, Mo-1, D, 23, 59, 59) : new Date(Y, Mo-1, D, 0, 0, 0));
       const status = ref<=deadline ? "done_normal":"done_late";
       const s=store(); const idx=s.checkins.findIndex(c=>c.task_id===t.id && c.date===curDate);
-      const rec={ id: crypto.randomUUID(), task_id:t.id, date:curDate, status, checked_at:new Date().toISOString(), checked_by:role };
+      // 复用同一天同任务的已有记录 id：避免重复生成随机 id 导致合并时出现两条打卡记录（表现为“撤销/补打后又回来”）
+      const rec={ id: idx>=0 ? s.checkins[idx].id : crypto.randomUUID(), task_id:t.id, date:curDate, status, checked_at:new Date().toISOString(), checked_by:role };
       if(idx>=0) s.checkins[idx]=rec; else s.checkins.push(rec);
       const before=s.flowers.length; save(s); rebuildGrowth();
       const after=store().flowers.length;
