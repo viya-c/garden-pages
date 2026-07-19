@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#7cc77c" />
-  <title>🌱 我的成长花园（云端多人版）</title>
+  <title>🌱 我的成长花园（GitHub 云端同步版）</title>
   
   <style>
     :root {
@@ -255,7 +255,7 @@
       <div id="momContent" class="hidden">
         <div class="card">
           <div class="card-title">📱 云端同步状态 <span id="cloudStatus" style="font-size:13px;font-weight:600;padding:2px 8px;border-radius:999px;background:#fde9d0;color:#b08968;vertical-align:middle;">正在连接…</span></div>
-          <p class="muted">本版本数据保存在 Supabase 云端，全家共享、自动同步。换手机或给爸爸用，直接打开同一个网址即可，无需导出导入（下方「导出备份」可作额外保险）。<br><span id="cloudStatusTip" style="color:#b08968;">请稍候，正在检测云端连接…</span></p>
+          <p class="muted">本版本数据保存在 <b>GitHub 云端</b>，全家共享、自动同步。换手机或给爸爸用，直接打开同一个网址即可，无需导出导入（下方「导出备份」可作额外保险）。<br><span id="cloudStatusTip" style="color:#b08968;">请稍候，正在检测云端连接…</span></p>
           <button id="btnCloudRetry" class="btn-ghost" style="margin-top:8px;">🔄 重试连接</button>
         </div>
         <div class="card">
@@ -317,9 +317,9 @@
   <div id="setupModal" class="setup-modal hidden">
     <div class="setup-card">
       <div class="setup-title">🌱 首次配置</div>
-      <p class="setup-tip">已默认配置好 Cloudflare 代理地址，通常无需修改。如需自建后端，可把 <b>Project URL</b> 和 <b>anon public key</b> 粘贴进来（只存在本机浏览器）。详见「部署步骤.md」。</p>
-      <label class="field">Project URL（代理地址）<input id="setupUrl" type="text" placeholder="https://xxxx.workers.dev" /></label>
-      <label class="field">anon public key<input id="setupKey" type="text" placeholder="eyJhbGci..." /></label>
+      <p class="setup-tip">本应用用 <b>GitHub</b> 做云端同步（免费、国内可直连、无需代理/绑卡）。请输入：① <b>GitHub 个人令牌 Token</b>（需勾选 <b>repo</b> 权限）；② 存放数据的 <b>仓库路径</b>（格式 <b>owner/repo</b>，可与本应用同一仓库）。两者只存本机浏览器，不会上传。</p>
+      <label class="field">GitHub 令牌 Token<input id="setupToken" type="text" placeholder="ghp_xxxxxxxxxxxx" /></label>
+      <label class="field">仓库路径 owner/repo<input id="setupRepo" type="text" placeholder="viya-c/garden-data" /></label>
       <button id="setupSave" class="btn-primary">保存并进入</button>
       <div id="setupErr" class="hidden" style="color:#e5484d;font-size:13px;margin-top:6px;"></div>
     </div>
@@ -332,69 +332,114 @@
     const $ = (id) => document.getElementById(id);
     const WEEK = ["周日","周一","周二","周三","周四","周五","周六"];
     const KEY = "growth_garden_v1";
-    // ===== Supabase 云端配置（多人实时，经 Cloudflare 代理）=====
-    // 👇 经由 Cloudflare Worker 反向代理转发到 Supabase。
-    //    内地手机直连 *.supabase.co 会被 DNS 污染（报“找不到服务器”），所以必须走这个代理地址。
-    const SUPABASE_URL = "https://autumn-hat-6475.1032237642.workers.dev";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyc3VjdGt2dGJwYnBycHBoeWVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNTUzMjEsImV4cCI6MjA5OTkzMTMyMX0.v2m41m-VQcfMNO-YFIJEvhJrPGj5-T5NJf6eZVYp8Bs";
-    const PROXY_URL = SUPABASE_URL; // 代理地址（用于一次性迁移本地旧配置）
-    // 配置优先读浏览器本地（首次配置弹窗写入），其次才是源码里的常量
+    // ===== 云端配置（GitHub 作为后端：国内直连、免费、无需代理、无需绑卡）=====
+    // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
+    // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
+    const GH_PATH = "store.json";
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
-        let url = (c.url || SUPABASE_URL || "").trim();
-        // 一次性迁移：把本地存过的旧/错地址自动改写为当前正确的代理地址
-        //   - 被污染的 *.supabase.co
-        //   - 之前误填的 *.workers.dev（如改名前的 garden.1032237642.workers.dev）
-        if (/\.supabase\.co$/i.test(url) || (/workers\.dev$/i.test(url) && url !== PROXY_URL)) url = PROXY_URL;
-        return { url, key: (c.key || SUPABASE_ANON_KEY || "").trim() };
-      } catch (e) { return { url: "", key: "" }; }
+        return { token: (c.token || "").trim(), repo: (c.repo || "").trim() };
+      } catch (e) { return { token: "", repo: "" }; }
     }
     const _cfg = readConfig();
-    // 云端就绪判定 + 直接 REST 访问（不再依赖 supabase-js 库，避免该库在部分手机上异常导致“云端返回错误”）
-    const cloudReady = !!(_cfg.url && _cfg.key);
-    const REST = (_cfg.url || "").replace(/\/+$/,"") + "/rest/v1";
-    const AHEAD = { "apikey": _cfg.key, "Authorization": "Bearer " + _cfg.key, "Content-Type": "application/json" };
-    async function restJSON(method, path, body, prefer) {
-      const headers = Object.assign({}, AHEAD);
-      if (prefer) headers["Prefer"] = prefer;
-      // 放宽超时 + 自动重试：手机跨国链路（中国→Cloudflare→新加坡 Supabase）偶发 >20s，
-      // 原 20s 超时会被 AbortController 掐断成 “fetch is aborted”，故放到 45s 并失败重试。
-      const MAX_MS = 45000, RETRIES = 2;
-      let lastErr;
-      for (let attempt = 0; attempt <= RETRIES; attempt++) {
-        const ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
-        const to = ctrl ? setTimeout(() => ctrl.abort(), MAX_MS) : null;
+    const GH_TOKEN = _cfg.token;
+    const GH_REPO = _cfg.repo;                       // 形如 "viya-c/garden-data"
+    const cloudReady = !!(GH_TOKEN && GH_REPO);
+    function ghOwnerRepo() { const p = (GH_REPO || "").split("/"); return { owner: p[0] || "", repo: p[1] || p[0] || "" }; }
+    function decodeBase64(b64){ const bin = atob((b64||"").replace(/\s/g,"")); const bytes = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i); return new TextDecoder().decode(bytes); }
+    function encodeBase64(str){ const bytes = new TextEncoder().encode(str); let bin = ""; for (let i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]); return btoa(bin); }
+    async function githubRead() {
+      const { owner, repo } = ghOwnerRepo();
+      const url = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + encodeURIComponent(GH_PATH);
+      const ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+      const to = ctrl ? setTimeout(() => ctrl.abort(), 30000) : null;
+      try {
+        const r = await fetch(url, { headers: { "Authorization": "Bearer " + GH_TOKEN, "Accept": "application/vnd.github+json" }, signal: ctrl ? ctrl.signal : undefined });
+        if (to) clearTimeout(to);
+        if (r.status === 404) return { store: null, sha: null };
+        if (!r.ok) throw new Error("GitHub GET -> " + r.status);
+        const j = await r.json();
+        return { store: JSON.parse(decodeBase64(j.content)), sha: j.sha };
+      } catch (e) { if (to) clearTimeout(to); throw e; }
+    }
+    async function githubWrite(store, sha) {
+      const { owner, repo } = ghOwnerRepo();
+      const url = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + encodeURIComponent(GH_PATH);
+      const body = { message: "sync growth garden", content: encodeBase64(JSON.stringify(store, null, 2)), committer: { name: "growth-garden", email: "app@garden.local" } };
+      if (sha) body.sha = sha;
+      const r = await fetch(url, { method: "PUT", headers: { "Authorization": "Bearer " + GH_TOKEN, "Accept": "application/vnd.github+json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (r.status === 409) { const e = new Error("conflict"); e.code = "CONFLICT"; throw e; }
+      if (!r.ok) { const t = await r.text(); throw new Error("GitHub PUT -> " + r.status + ": " + t.slice(0,200)); }
+      const j = await r.json();
+      return j.content ? j.content.sha : sha;
+    }
+    // 三路合并：local=本机当前，remote=云端当前，prev=上次同步时的共同祖先
+    const SET_FIELDS = ["child_name","mom_pin","flowers_per_redemption","points_per_redemption"];
+    function settingsRec(s){ const o = { id:"settings" }; for (const f of SET_FIELDS) o[f] = s[f]; return o; }
+    function applySettings(s, rec){ for (const f of SET_FIELDS) s[f] = rec[f]; }
+    function mergeArray(localArr, remoteArr, prevArr) {
+      const lm = new Map((localArr||[]).map(r=>[r.id,r])), rm = new Map((remoteArr||[]).map(r=>[r.id,r])), pm = new Map((prevArr||[]).map(r=>[r.id,r]));
+      const ids = new Set([...lm.keys(), ...rm.keys()]); const out = [];
+      for (const id of ids) {
+        const l = lm.get(id), r = rm.get(id), p = pm.get(id);
+        if (l && !r) out.push(l);
+        else if (!l && r) out.push(r);
+        else if (!p) out.push(r || l);                                // 无祖先：云端优先
+        else if (JSON.stringify(l) === JSON.stringify(p)) out.push(r); // 本机未改 → 用云端
+        else if (JSON.stringify(r) === JSON.stringify(p)) out.push(l); // 云端未改 → 用本机
+        else out.push(l);                                             // 两边都改（罕见）→ 本机优先
+      }
+      return out;
+    }
+    function mergeStores(local, remote, prev) {
+      remote = remote || { categories:[], tasks:[], checkins:[], redemptions:[], settings: settingsRec(local) };
+      prev = prev || { categories:[], tasks:[], checkins:[], redemptions:[], settings: settingsRec(local) };
+      const m = {
+        categories: mergeArray(local.categories, remote.categories, prev.categories),
+        tasks: mergeArray(local.tasks, remote.tasks, prev.tasks),
+        checkins: mergeArray(local.checkins, remote.checkins, prev.checkins),
+        redemptions: mergeArray(local.redemptions, remote.redemptions, prev.redemptions)
+      };
+      applySettings(m, mergeArray([settingsRec(local)], [settingsRec(remote)], [settingsRec(prev)])[0]);
+      return m;
+    }
+    function settingsSnapshot(s){ return { categories:s.categories, tasks:s.tasks, checkins:s.checkins, redemptions:s.redemptions, settings: settingsRec(s) }; }
+    let _syncTimer = null;
+    async function syncNow() {
+      if (!cloudReady || !MEM) return;
+      for (let attempt = 0; attempt < 4; attempt++) {
         try {
-          const r = await fetch(REST + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: ctrl ? ctrl.signal : undefined });
-          if (to) clearTimeout(to);
-          const txt = await r.text();
-          let data = null; try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
-          if (!r.ok) { const msg = (data && (data.message || (data.error && data.error.message))) || txt.slice(0,200); throw new Error(method + " " + path + " -> HTTP " + r.status + ": " + msg); }
-          return data;
+          const remote = await githubRead();
+          const merged = remote.store ? mergeStores(MEM, remote.store, _prev) : JSON.parse(JSON.stringify(MEM));
+          const sha = await githubWrite(merged, remote.sha);
+          MEM = merged; _prev = settingsSnapshot(merged);
+          recomputeGrowth(MEM);
+          try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
+          updateCloudStatus("online");
+          if (typeof refresh === "function") refresh();
+          return;
         } catch (e) {
-          if (to) clearTimeout(to);
-          lastErr = e;
-          const m = (e && e.message) ? e.message : String(e);
-          const transient = /abort|failed to fetch|networkerror|timeout/i.test(m);
-          if (!transient || attempt >= RETRIES) throw e;   // 非 transient（如 HTTP 错误）或重试耗尽，直接抛出
-          await new Promise(res => setTimeout(res, 800 * (attempt + 1)));  // 退避后重试
+          if (e && e.code === "CONFLICT") { await new Promise(r => setTimeout(r, 400)); continue; }
+          console.error("syncNow failed", e); updateCloudStatus("error"); toast("⚠️ 云端同步失败，已保留本机数据"); return;
         }
       }
-      throw lastErr;
     }
-    async function restGet(tbl, qs){ const d = await restJSON("GET", "/" + tbl + (qs || "")); return Array.isArray(d) ? d : []; }
-    async function restUpsert(tbl, rows){ if (!rows || !rows.length) return; await restJSON("POST", "/" + tbl, rows, "resolution=merge-duplicates"); }
-    async function restDelete(tbl, ids){ for (const id of (ids || [])) { await restJSON("DELETE", "/" + tbl + "?id=eq." + encodeURIComponent(id)); } }
-    // ===== 云端连接状态指示（替代原写死的“云端多人版”文案）=====
+    async function persistStore() {
+      if (!cloudReady || !MEM) return;
+      updateCloudStatus("connecting");
+      if (_syncTimer) clearTimeout(_syncTimer);
+      _syncTimer = setTimeout(() => { syncNow().catch(() => {}); }, 700);
+    }
+    // ===== 云端连接状态指示 =====
     function updateCloudStatus(state) {
       const el = $("cloudStatus"), tip = $("cloudStatusTip");
       if (!el) return;
       const map = {
-        connecting: { t:"🔄 正在连接云端…", bg:"#fde9d0", c:"#b08968", tip:"正在连接 Supabase 云端…" },
-        online:     { t:"☁️ 云端已连接·已同步", bg:"#e3f5e3", c:"#2e7d32", tip:"数据已与云端同步，全家共享，刷新不丢失。" },
-        offline:    { t:"⚠️ 未连接·本地模式", bg:"#fde3e3", c:"#c62828", tip:"云端未连接，当前为本地模式——数据会自动存在本机（刷新不丢），但换设备/换浏览器不会同步。已通过 Cloudflare 代理直连云端，请检查网络后刷新重试。" },
-        error:      { t:"⚠️ 同步失败", bg:"#fde3e3", c:"#c62828", tip:"与云端同步失败，请检查网络后刷新重试。" }
+        connecting: { t:"🔄 正在同步…", bg:"#fde9d0", c:"#b08968", tip:"正在与 GitHub 云端同步…" },
+        online:     { t:"☁️ 云端已连接·已同步", bg:"#e3f5e3", c:"#2e7d32", tip:"数据已存到 GitHub 云端，全家共享，刷新不丢失。" },
+        offline:    { t:"⚠️ 未连接·本地模式", bg:"#fde3e3", c:"#c62828", tip:"未配置 GitHub 云端，当前为本地模式——数据存本机（刷新不丢），但换设备不共享。点「重试连接」配置令牌。" },
+        error:      { t:"⚠️ 同步失败", bg:"#fde3e3", c:"#c62828", tip:"与 GitHub 云端同步失败，请检查网络或令牌后重试。" }
       };
       const s = map[state] || map.connecting;
       el.textContent = s.t; el.style.background = s.bg; el.style.color = s.c;
@@ -534,7 +579,7 @@
         checkins:[], flowers:[], growth:{current_species:"",progress:0}, redemptions:[], seq:4, catSeq:4, flowerSeq:0,
       };
     }
-    // ===== 云端数据层（Supabase 适配器）=====
+    // ===== 数据层（本地 + GitHub 云端同步，无代理、无绑卡、国内直连）=====
     let MEM = null, _prev = null, _rtTimer = null;
     function store() { return MEM; }
     function save(s) { MEM = s; try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} persistStore(); }
@@ -542,72 +587,35 @@
       try { const raw = localStorage.getItem(KEY); if (!raw) return null; const s = JSON.parse(raw); if (s && Array.isArray(s.categories)) { recomputeGrowth(s); return s; } } catch (e) {}
       return null;
     }
-    async function persistStore() {
-      if (!cloudReady || !MEM) return;
-      const cur = MEM;
-      let failed = false;
-      const setRow = { id:"settings", child_name:cur.child_name, mom_pin:cur.mom_pin, flowers_per_redemption:cur.flowers_per_redemption, points_per_redemption:cur.points_per_redemption };
-      try { await restUpsert("settings", [setRow]); } catch (e) { failed = true; console.error("persist settings", e); }
-      const prev = _prev || { categories:[], tasks:[], checkins:[], redemptions:[] };
-      for (const tbl of ["categories","tasks","checkins","redemptions"]) {
-        const curRows = cur[tbl] || [], prevRows = prev[tbl] || [];
-        const prevMap = new Map(prevRows.map(r=>[r.id, r]));
-        const curMap = new Map(curRows.map(r=>[r.id, r]));
-        const toUpsert = curRows.filter(r=>{ const p = prevMap.get(r.id); return !p || JSON.stringify(p) !== JSON.stringify(r); });
-        const toDelete = prevRows.filter(r=>!curMap.has(r.id)).map(r=>r.id);
-        try { if (toUpsert.length) await restUpsert(tbl, toUpsert); } catch (e) { failed = true; console.error("upsert "+tbl, e); }
-        try { if (toDelete.length) await restDelete(tbl, toDelete); } catch (e) { failed = true; console.error("delete "+tbl, e); }
-      }
-      if (failed) { updateCloudStatus("error"); toast("⚠️ 部分数据同步失败，请刷新重试"); }
-      else { updateCloudStatus("online"); }
-      _prev = JSON.parse(JSON.stringify({ categories:cur.categories, tasks:cur.tasks, checkins:cur.checkins, redemptions:cur.redemptions, settings:setRow }));
-    }
-    function snapshot(s) { return JSON.parse(JSON.stringify({ categories:s.categories, tasks:s.tasks, checkins:s.checkins, redemptions:s.redemptions, settings:{ id:"settings", child_name:s.child_name, mom_pin:s.mom_pin, flowers_per_redemption:s.flowers_per_redemption, points_per_redemption:s.points_per_redemption } })); }
     function bootstrapLocal() { const s = defaultStore(); recomputeGrowth(s); return s; }
-    function supaErrText(r){ if(!r||!r.error) return ""; const e=r.error; return [e.code,e.message,e.details,e.hint].filter(Boolean).join(" | "); }
-    function errText(e){
-      if(e&&e.error) return supaErrText({error:e.error});
-      if(e&&(e.code||e.message)) return [e.code,e.message,e.details,e.hint].filter(Boolean).join(" | ");
-      const m=(e&&e.message)?e.message:String(e);
-      if(/abort|timeout/i.test(m)) return m+"（← 请求超时/被取消：跨国链路较慢，已自动重试；若仍失败可点上方「重试连接」）";
-      if(/failed to fetch|networkerror/i.test(m)) return m+"（← 看起来是网络连不上云端代理 workers.dev）";
-      if(/permission|rls|denied|42501|pgrst/i.test(m)) return m+"（← 看起来是权限/RLS 策略问题）";
+    function errText(e) {
+      const m = (e && e.message) ? e.message : String(e);
+      if (/abort|timeout/i.test(m)) return m + "（← 请求超时/被取消：GitHub 链路较慢，已自动重试；若仍失败可点上方「重试连接」）";
+      if (/401|403/i.test(m)) return m + "（← GitHub 令牌无效或无权限：请检查是否已过期、是否勾选 repo 权限）";
+      if (/409/i.test(m)) return m + "（← 多端同时修改产生冲突，正在自动重试合并）";
+      if (/failed to fetch|networkerror|enotfound|getaddrinfo|dns/i.test(m)) return m + "（← 网络连不上 GitHub：请确认手机能访问 github.com）";
       return m;
     }
     async function loadAll(silent) {
-      if (!cloudReady) { if (!MEM) { const l = readLocal(); MEM = l || bootstrapLocal(); } return; }
+      if (!cloudReady) { if (!MEM) { const l = readLocal(); MEM = l || bootstrapLocal(); recomputeGrowth(MEM); } return; }
       if (!silent) updateCloudStatus("connecting");
       try {
-        const [cats, tasks, checkins, redemptions, settings] = await Promise.all([
-          restGet("categories"), restGet("tasks"),
-          restGet("checkins"), restGet("redemptions"),
-          restGet("settings", "?select=*&limit=1")
-        ]);
-        const c = cats||[], t = tasks||[], ck = checkins||[], rd = redemptions||[], st = settings||[];
-        let s;
-        if (c.length === 0) {
-          s = defaultStore();
-          await restUpsert("categories", s.categories);
-          await restUpsert("tasks", s.tasks);
-          await restUpsert("settings", [{ id:"settings", child_name:s.child_name, mom_pin:s.mom_pin, flowers_per_redemption:s.flowers_per_redemption, points_per_redemption:s.points_per_redemption }]);
-        } else {
-          s = { child_name:(st[0]&&st[0].child_name)||"宝贝", mom_pin:(st[0]&&st[0].mom_pin)||"1234",
-                flowers_per_redemption:(st[0]&&st[0].flowers_per_redemption)||5, points_per_redemption:(st[0]&&st[0].points_per_redemption)||10,
-                categories:c, tasks:t, checkins:ck, redemptions:rd };
-        }
-        recomputeGrowth(s); MEM = s; _prev = snapshot(s);
-        try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+        const remote = await githubRead();
+        const base = MEM || readLocal() || bootstrapLocal();
+        const merged = remote.store ? mergeStores(base, remote.store, _prev || settingsSnapshot(base)) : JSON.parse(JSON.stringify(base));
+        MEM = merged; _prev = settingsSnapshot(merged); recomputeGrowth(MEM);
+        try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
         updateCloudStatus("online");
+        if (!remote.store && cloudReady) { syncNow().catch(() => {}); } // 首次：把本机初始数据写入云端作为种子文件
       } catch (e) {
         console.error("loadAll failed", e);
-        // 关键修复：云端失败时【保留】当前数据，不再清空；优先从本地缓存恢复
-        if (!MEM) { const l = readLocal(); MEM = l || bootstrapLocal(); }
+        // 云端失败时【保留】当前数据，不再清空；优先从本地缓存恢复
+        if (!MEM) { const l = readLocal(); MEM = l || bootstrapLocal(); recomputeGrowth(MEM); }
         if (!silent) {
           updateCloudStatus("error");
-          const msg = errText(e);
           const tip = $("cloudStatusTip");
-          if (tip) tip.textContent = "同步失败原因：" + msg + "（可点上方「重试连接」）";
-          toast("⚠️ 云端同步失败，已用本地数据");
+          if (tip) tip.textContent = "同步失败：" + errText(e) + "（可点上方「重试连接」）";
+          toast("⚠️ 云端同步失败，已用本机数据");
         }
       }
     }
@@ -993,11 +1001,11 @@ function showBloom(species) {
     }
     function showConfigHint() {
       // 预填当前配置，方便只改地址
-      if ($("setupUrl")) $("setupUrl").value = _cfg.url || "";
-      if ($("setupKey")) $("setupKey").value = _cfg.key || "";
+      if ($("setupToken")) $("setupToken").value = _cfg.token || "";
+      if ($("setupRepo")) $("setupRepo").value = _cfg.repo || "";
       const m = $("setupModal"); if (m) m.classList.remove("hidden");
     }
-    $("setupSave").addEventListener("click", ()=>{ const u = $("setupUrl").value.trim(), k = $("setupKey").value.trim(); if (!u || !k) { $("setupErr").textContent = "两项都要填哦～"; $("setupErr").classList.remove("hidden"); return; } localStorage.setItem("gg_config", JSON.stringify({ url:u, key:k })); location.reload(); });
+    $("setupSave").addEventListener("click", ()=>{ const t = $("setupToken").value.trim(), r = $("setupRepo").value.trim(); if (!t || !r) { $("setupErr").textContent = "令牌和仓库路径都要填哦～"; $("setupErr").classList.remove("hidden"); return; } localStorage.setItem("gg_config", JSON.stringify({ token:t, repo:r })); location.reload(); });
     bind();
     const btnCloudRetry = $("btnCloudRetry");
     if (btnCloudRetry) btnCloudRetry.addEventListener("click", async ()=>{
