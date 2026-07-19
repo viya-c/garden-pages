@@ -276,8 +276,10 @@
       <div id="pinGate" class="card pin-gate">
         <div class="card-title">🔐 妈妈专属</div>
         <p class="muted">请输入妈妈 PIN 码（默认 1234）</p>
-        <input id="pinInput" name="pin" type="password" inputmode="numeric" autocomplete="off" autocapitalize="off" maxlength="8" placeholder="PIN 码" />
-        <button id="btnPinOk" class="btn-primary">进入</button>
+        <form id="pinForm" novalidate>
+          <input id="pinInput" name="pin" type="password" inputmode="numeric" autocomplete="off" autocapitalize="off" maxlength="8" placeholder="PIN 码" />
+          <button id="btnPinOk" type="submit" class="btn-primary">进入</button>
+        </form>
         <div id="pinErr" class="err hidden">PIN 码不正确</div>
       </div>
       <div id="momContent" class="hidden">
@@ -368,7 +370,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19k"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19l"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -768,6 +770,8 @@
     function toast(m){ const t=$("toast"); t.textContent=m; t.classList.remove("hidden"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.add("hidden"),1800); }
     function flySeeds(){ const layer=$("fxLayer"); const em=["🌱","🌰","🌿","✨"]; for(let i=0;i<8;i++){ const f=document.createElement("div"); f.className="fx-seed"; f.textContent=em[i%em.length]; f.style.left=(20+Math.random()*60)+"%"; f.style.bottom="120px"; f.style.animationDelay=(Math.random()*0.3)+"s"; layer.appendChild(f); setTimeout(()=>f.remove(),1500); } }
     function verifyPin(p){ return p!==null && String(p)===store().mom_pin; }
+    // 解锁妈妈中心：先收起键盘（避免 iOS 主屏独立模式下键盘遮挡/点击被吞），再校验
+    function tryUnlockPin(){ const pin=$("pinInput").value; try{ $("pinInput").blur(); }catch(e){} if(verifyPin(pin)){ momPin=pin; momUnlocked=true; sessionStorage.setItem("momPin",pin); $("pinErr").classList.add("hidden"); refresh(); } else { $("pinErr").classList.remove("hidden"); } }
 
     function repeatLabel(t) {
       const rd = (t.repeat_days ? t.repeat_days : (t.repeat_mode === "weekday" ? "1,2,3,4,5" : "1,2,3,4,5,6,7")).split(",").filter(Boolean).map(Number).sort((a, b) => a - b);
@@ -1218,9 +1222,11 @@ function showBloom(species) {
         if(s.flowers.length - s.redemptions.filter(r=>r.type==="point"&&r.status==="approved").reduce((a,r)=>a+r.amount,0) - s.redemptions.filter(r=>r.type==="point"&&r.status==="pending").reduce((a,r)=>a+r.amount,0) < fpr){ toast("花朵不足，需集满 "+fpr+" 朵"); return; }
         s.redemptions.push({ id:crypto.randomUUID(), type:"point", amount:fpr, points:ppr, status:"pending", created_at:new Date().toISOString() }); save(s); toast("已向妈妈申请兑换~"); refresh();
       });
-      $("btnPinOk").addEventListener("click",()=>{ const pin=$("pinInput").value; if(verifyPin(pin)){ momPin=pin; momUnlocked=true; sessionStorage.setItem("momPin",pin); $("pinErr").classList.add("hidden"); refresh(); } else { $("pinErr").classList.remove("hidden"); } });
-      // 回车也能提交（主屏图标/独立模式下更稳，避免只靠点击“进入”）
-      const pinInput=$("pinInput"); if(pinInput) pinInput.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); $("btnPinOk").click(); } });
+      // PIN 解锁：用 form 的 submit 作为主路径（iOS 在键盘开启时对“提交表单”也能可靠触发，
+      // 不会被系统拿去先收键盘而吞掉点击）；再补 touchend 兜底，覆盖主屏独立模式的点击异常
+      const pinForm=$("pinForm"); if(pinForm) pinForm.addEventListener("submit",(e)=>{ e.preventDefault(); tryUnlockPin(); });
+      const pinInputEl=$("pinInput"); if(pinInputEl) pinInputEl.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); tryUnlockPin(); } });
+      const btnPinOkEl=$("btnPinOk"); if(btnPinOkEl) btnPinOkEl.addEventListener("touchend",(e)=>{ e.preventDefault(); e.stopPropagation(); tryUnlockPin(); });
       $("btnAddTask").addEventListener("click",()=>openTaskModal(null));
       $("btnAddCat").addEventListener("click",()=>openCatModal(null));
       const btnExtraCheckin = $("btnExtraCheckin");
