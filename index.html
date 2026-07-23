@@ -196,6 +196,8 @@
     .bloom-lang { font-size: 14px; color: #4a5a4a; background: #fff0f6; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
     .bloom-lang b { color: #e85d9c; }
     .bloom-cheer { font-size: 15px; color: #2a7d46; font-weight: 700; margin-bottom: 14px; }
+    .bloom-times { font-size: 13px; color: #4a5a4a; background: #f0f9f0; border-radius: 12px; padding: 10px; margin-bottom: 8px; line-height: 1.7; }
+    .bloom-times .bt { display: inline-block; color: #2a7d46; font-weight: 700; }
     .bloom-card .btn-primary { margin-top: 4px; }
     .confetti { position: absolute; font-size: 22px; animation: conf 1.4s ease-out forwards; }
     @keyframes conf { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(160px) rotate(360deg); opacity: 0; } }
@@ -370,7 +372,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19n"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19o"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -766,6 +768,19 @@
     // ---------- 工具 ----------
     function todayStr(d) { d = d || new Date(); const z = (n)=>String(n).padStart(2,"0"); return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate()); }
     function shiftDate(s, delta) { const d = new Date(s+"T00:00:00"); d.setDate(d.getDate()+delta); return todayStr(d); }
+    // 把打卡时间戳(ISO)格式化成孩子好懂的开放时间：今天/昨天 HH:mm，更早则 M月D日 HH:mm
+    function fmtBloom(iso){
+      if(!iso) return "";
+      const d=new Date(iso); if(isNaN(d.getTime())) return "";
+      const z=n=>String(n).padStart(2,"0");
+      const hh=z(d.getHours()), mm=z(d.getMinutes());
+      const today=todayStr(), that=todayStr(d);
+      let day;
+      if(that===today) day="今天";
+      else if(that===shiftDate(today,-1)) day="昨天";
+      else day=(d.getMonth()+1)+"月"+d.getDate()+"日";
+      return day+" "+hh+":"+mm;
+    }
     function esc(s){ return String(s).replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
     function toast(m){ const t=$("toast"); t.textContent=m; t.classList.remove("hidden"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.add("hidden"),1800); }
     function flySeeds(){ const layer=$("fxLayer"); const em=["🌱","🌰","🌿","✨"]; for(let i=0;i<8;i++){ const f=document.createElement("div"); f.className="fx-seed"; f.textContent=em[i%em.length]; f.style.left=(20+Math.random()*60)+"%"; f.style.bottom="120px"; f.style.animationDelay=(Math.random()*0.3)+"s"; layer.appendChild(f); setTimeout(()=>f.remove(),1500); } }
@@ -845,8 +860,9 @@
     function recomputeGrowth(s) {
       const rows = (s.checkins||[]).filter(c=>c.status==="done_normal"||c.status==="done_late").slice().sort((a,b)=> a.checked_at.localeCompare(b.checked_at) || (String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0)));
       let cur="", prog=0, bloomed=[];
-      rows.forEach(r=>{ if(cur===""){ cur=pick_species(r.id); prog=1; } else { prog++; } if(prog>=3){ bloomed.push(cur); cur=""; prog=0; } });
-      s.flowers = bloomed.map(sp=>({ id: crypto.randomUUID(), species:sp, bloomed_at:new Date().toISOString() }));
+      // 每满 3 次打卡开一朵花；第 3 次打卡触发开花，开放时间取该次打卡的真实 checked_at（而非重算时的当前时间）
+      rows.forEach(r=>{ if(cur===""){ cur=pick_species(r.id); prog=1; } else { prog++; } if(prog>=3){ bloomed.push({ id:"fl_"+r.id, species:cur, bloom_at:r.checked_at }); cur=""; prog=0; } });
+      s.flowers = bloomed;
       s.growth = { current_species:cur, progress:prog };
     }
 
@@ -1032,8 +1048,15 @@
 
 function showBloom(species) {
       const f=FLOWERS[species]; if(!f) return;
+      // 取出该花种所有已开花，按开放时间倒序，逐朵显示“开放时间”
+      const list=(STATE&&STATE.flowers||[]).filter(x=>x.species===species).sort((a,b)=>String(b.bloom_at||"").localeCompare(String(a.bloom_at||"")));
+      let timesHtml="";
+      if(list.length){
+        const items=list.map(x=>'<span class="bt">'+esc(fmtBloom(x.bloom_at))+'</span>');
+        timesHtml='<div class="bloom-times">🌸 开放时间：'+(list.length>1?'<br>'+items.join('<br>'):items.join('、'))+'</div>';
+      }
       const ov=$("bloomOverlay");
-      ov.innerHTML='<div class="bloom-card">'+f.svg+'<div class="bloom-title">'+esc(f.name)+' 开花啦！</div><div class="bloom-pinyin">'+esc(f.pinyin)+'</div><div class="bloom-lang">花语：<b>'+esc(f.lang)+'</b></div><div class="bloom-cheer">'+esc(f.cheer)+'</div><button class="btn-primary" id="bloomOk">太棒啦！</button></div>';
+      ov.innerHTML='<div class="bloom-card">'+f.svg+'<div class="bloom-title">'+esc(f.name)+' 开花啦！</div><div class="bloom-pinyin">'+esc(f.pinyin)+'</div><div class="bloom-lang">花语：<b>'+esc(f.lang)+'</b></div><div class="bloom-cheer">'+esc(f.cheer)+'</div>'+timesHtml+'<button class="btn-primary" id="bloomOk">太棒啦！</button></div>';
       ov.classList.remove("hidden"); spawnConfetti(ov);
       $("bloomOk").addEventListener("click",()=>ov.classList.add("hidden"));
     }
