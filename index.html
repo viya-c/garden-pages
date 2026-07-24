@@ -198,6 +198,11 @@
     .bloom-cheer { font-size: 15px; color: #2a7d46; font-weight: 700; margin-bottom: 14px; }
     .bloom-times { font-size: 13px; color: #4a5a4a; background: #f0f9f0; border-radius: 12px; padding: 10px; margin-bottom: 8px; line-height: 1.7; }
     .bloom-times .bt { display: inline-block; color: #2a7d46; font-weight: 700; }
+    .acct { display:flex; gap:8px; margin-top:4px; }
+    .acct-cell { flex:1; text-align:center; background:#f6fbf6; border-radius:12px; padding:10px 2px; }
+    .acct-cell b { display:block; font-size:20px; color:#e85d9c; }
+    .acct-cell small { font-size:11px; color:#7a8a7a; }
+    .acct-pending { font-size:12px; color:#c98a3a; margin-top:6px; text-align:center; }
     .bloom-card .btn-primary { margin-top: 4px; }
     .confetti { position: absolute; font-size: 22px; animation: conf 1.4s ease-out forwards; }
     @keyframes conf { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(160px) rotate(360deg); opacity: 0; } }
@@ -267,6 +272,15 @@
         <div class="card-title">⭐ 我的积分</div>
         <div class="point-big"><b id="rPoint">0</b> 分</div>
         <div class="reward-hint">集满 <span id="rFpr">5</span> 朵花，可找妈妈换 <span id="rPpr">10</span> 分。</div>
+      </div>
+      <div class="card">
+        <div class="card-title">🌸 花朵账本</div>
+        <div class="acct">
+          <div class="acct-cell"><b id="acctBloom">0</b><small>已开花</small></div>
+          <div class="acct-cell"><b id="acctRedeemed">0</b><small>已兑换</small></div>
+          <div class="acct-cell"><b id="acctAvail">0</b><small>剩余可兑换</small></div>
+        </div>
+        <div id="acctPending" class="acct-pending hidden">其中 <span id="acctPendingN">0</span> 朵待妈妈批准</div>
       </div>
       <div class="redeem-btns">
         <button id="btnRedeem" class="btn-primary">🌸 用花朵找妈妈换积分</button>
@@ -372,7 +386,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19o"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19p"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -1010,6 +1024,16 @@
       else { gf.classList.add("hidden"); }
       document.querySelectorAll(".stage-steps .step").forEach(function(el){ const s=+el.dataset.step; el.classList.toggle("active", s===stageIdx); el.classList.toggle("done", stageIdx>s && stageIdx!==0); });
       $("gardenCount").textContent=r.flowers_bloomed; $("rPoint").textContent=r.points;
+      // 花朵账本：已开花 / 已兑换(已批准) / 剩余可兑换(含待批提示)
+      const _s=store();
+      const _all=_s.flowers.length;
+      const _app=_s.redemptions.filter(x=>x.type==="point"&&x.status==="approved").reduce((a,x)=>a+x.amount,0);
+      const _pend=_s.redemptions.filter(x=>x.type==="point"&&x.status==="pending").reduce((a,x)=>a+x.amount,0);
+      const _avail=Math.max(0,_all-_app-_pend);
+      if($("acctBloom")) $("acctBloom").textContent=_all;
+      if($("acctRedeemed")) $("acctRedeemed").textContent=_app;
+      if($("acctAvail")) $("acctAvail").textContent=_avail;
+      const _ap=$("acctPending"); if(_ap){ _ap.classList.toggle("hidden", !_pend); if(_pend && $("acctPendingN")) $("acctPendingN").textContent=_pend; }
       $("rFpr").textContent=cfg.flowers_per_redemption; $("rPpr").textContent=cfg.points_per_redemption;
       const garden=$("garden"); garden.innerHTML="";
       if(!STATE.flowers.length){ $("gardenEmpty").classList.remove("hidden"); }
