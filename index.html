@@ -203,6 +203,7 @@
     .acct-cell b { display:block; font-size:20px; color:#e85d9c; }
     .acct-cell small { font-size:11px; color:#7a8a7a; }
     .acct-pending { font-size:12px; color:#c98a3a; margin-top:6px; text-align:center; }
+    .point-sub { font-size:12px; color:#9bb09b; margin-top:2px; }
     .bloom-card .btn-primary { margin-top: 4px; }
     .confetti { position: absolute; font-size: 22px; animation: conf 1.4s ease-out forwards; }
     @keyframes conf { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(160px) rotate(360deg); opacity: 0; } }
@@ -271,6 +272,7 @@
       <div class="card">
         <div class="card-title">⭐ 我的积分</div>
         <div class="point-big"><b id="rPoint">0</b> 分</div>
+        <div class="point-sub" id="rPointSub"></div>
         <div class="reward-hint">集满 <span id="rFpr">5</span> 朵花，可找妈妈换 <span id="rPpr">10</span> 分。</div>
       </div>
       <div class="card">
@@ -332,6 +334,17 @@
           <div id="approveEmpty" class="muted">暂时没有待审批的兑换~</div>
         </div>
         <div class="card">
+          <div class="card-title">💰 积分兑现（失效）</div>
+          <p class="muted">宝贝用花换到积分、妈妈实际兑现（给奖励）时，在这里把对应积分“失效”，余额自动扣减，避免重复计算。</p>
+          <div class="acct">
+            <div class="acct-cell"><b id="momPtEarned">0</b><small>累计获得</small></div>
+            <div class="acct-cell"><b id="momPtExpired">0</b><small>已失效</small></div>
+            <div class="acct-cell"><b id="momPtAvail">0</b><small>当前可用</small></div>
+          </div>
+          <label class="field" style="margin-top:10px;">本次要失效的积分数量<input id="setExpire" type="number" min="1" placeholder="如 30" /></label>
+          <button id="btnExpire" class="btn-primary">确认失效（兑现）</button>
+        </div>
+        <div class="card">
           <div class="card-title">📊 数据看板</div>
           <div class="dash-row">
             <div class="dash-cell"><b id="dashDone">0/0</b><small>今日完成</small></div>
@@ -386,7 +399,7 @@
     // 数据以单个 JSON 文件（默认 store.json）存放在你指定的 GitHub 仓库中，
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
-    const APP_VER = "2026-07-19p"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-19q"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -852,8 +865,10 @@
         if(r.status==="approved"){ spent+=r.amount; points+=r.points; }
         else if(r.status==="pending"){ reserved+=r.amount; }
       });
+      const expiredPoints = s.redemptions.filter(r=>r.type==="expire").reduce((a,r)=>a+(r.points||0),0);
+      const pointsAvailable = Math.max(0, points - expiredPoints);
       const available = s.flowers.length - spent - reserved;
-      const rewards = { flowers_bloomed:s.flowers.length, flowers_available:available, points, flowers_per_redemption:fpr, points_per_redemption:ppr, current_progress:s.growth.progress, current_species:s.growth.current_species };
+      const rewards = { flowers_bloomed:s.flowers.length, flowers_available:available, points, points_expired:expiredPoints, points_available:pointsAvailable, flowers_per_redemption:fpr, points_per_redemption:ppr, current_progress:s.growth.progress, current_species:s.growth.current_species };
       const pending = s.redemptions.filter(r=>r.type==="point" && r.status==="pending");
       const checkin_days = new Set(s.checkins.map(c=>c.date)).size;
       const checkin_total = s.checkins.length;
@@ -919,7 +934,7 @@
       else lb.classList.add("hidden");
 
       const r=STATE.rewards, cfg=STATE.config, prog=r.current_progress;
-      $("growCount").textContent = prog+"/3"; $("bloomCount").textContent=r.flowers_bloomed; $("pointCount").textContent=r.points;
+      $("growCount").textContent = prog+"/3"; $("bloomCount").textContent=r.flowers_bloomed; $("pointCount").textContent=r.points_available;
       $("growProg").style.width=(prog/3)*100+"%";
       $("growProgText").textContent = prog===0?"还差 3 次打卡":"还差 "+(3-prog)+" 次打卡";
       const list=$("taskList"); list.innerHTML="";
@@ -1023,7 +1038,7 @@
       if(sp&&FLOWERS[sp]){ gf.classList.remove("hidden"); gf.innerHTML='即将开花：<span class="dotc" style="background:'+FLOWERS[sp].color+'"></span><b>'+esc(FLOWERS[sp].name)+'</b>'; }
       else { gf.classList.add("hidden"); }
       document.querySelectorAll(".stage-steps .step").forEach(function(el){ const s=+el.dataset.step; el.classList.toggle("active", s===stageIdx); el.classList.toggle("done", stageIdx>s && stageIdx!==0); });
-      $("gardenCount").textContent=r.flowers_bloomed; $("rPoint").textContent=r.points;
+      $("gardenCount").textContent=r.flowers_bloomed; $("rPoint").textContent=r.points_available; if($("rPointSub")) $("rPointSub").textContent="累计获得 "+r.points+" · 已失效 "+r.points_expired;
       // 花朵账本：已开花 / 已兑换(已批准) / 剩余可兑换(含待批提示)
       const _s=store();
       const _all=_s.flowers.length;
@@ -1108,6 +1123,7 @@ function showBloom(species) {
       $("pinGate").classList.add("hidden"); $("momContent").classList.remove("hidden");
       initMomCollapse();
       if(STATE){ $("setChildName").value=STATE.child_name; $("setFpr").value=STATE.config.flowers_per_redemption; $("setPpr").value=STATE.config.points_per_redemption; }
+      if(STATE&&STATE.rewards){ if($("momPtEarned")) $("momPtEarned").textContent=STATE.rewards.points; if($("momPtExpired")) $("momPtExpired").textContent=STATE.rewards.points_expired; if($("momPtAvail")) $("momPtAvail").textContent=STATE.rewards.points_available; }
       CATEGORIES = store().categories;
       renderCategories();
       const pend=STATE?STATE.pending_points:[];
@@ -1285,6 +1301,17 @@ function showBloom(species) {
       $("btnSaveSettings").addEventListener("click",()=>{
         const s=store(); s.child_name=$("setChildName").value.trim()||"宝贝"; s.flowers_per_redemption=parseInt($("setFpr").value,10)||5; s.points_per_redemption=parseInt($("setPpr").value,10)||10;
         const np=$("setPin").value.trim(); if(np) s.mom_pin=np; save(s); toast("设置已保存"); refresh();
+      });
+      $("btnExpire").addEventListener("click",()=>{
+        const s=store();
+        const earned=s.redemptions.filter(r=>r.type==="point"&&r.status==="approved").reduce((a,r)=>a+r.points,0);
+        const expired=s.redemptions.filter(r=>r.type==="expire").reduce((a,r)=>a+r.points,0);
+        const avail=Math.max(0,earned-expired);
+        const q=parseInt($("setExpire").value,10);
+        if(!q||q<=0){ toast("请输入要失效的积分数量"); return; }
+        if(q>avail){ toast("当前可用积分只有 "+avail+"，无法失效更多"); return; }
+        s.redemptions.push({ id:crypto.randomUUID(), type:"expire", points:q, status:"done", created_at:new Date().toISOString() });
+        $("setExpire").value=""; save(s); toast("已失效 "+q+" 积分（兑现）✅"); refresh();
       });
       $("btnExport").addEventListener("click",()=>{ const blob=new Blob([JSON.stringify(store(),null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="花园备份_"+todayStr()+".json"; a.click(); toast("已导出备份"); });
       $("btnShare").addEventListener("click",()=>{ const u=location.href; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(()=>toast("已复制网址，发给家人即可✅")).catch(()=>toast("复制失败，请手动复制："+u)); } else { toast("请手动复制本页网址："+u); } });
