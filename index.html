@@ -402,7 +402,7 @@
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
     const DEFAULT_REPO = "viya-c/garden-data"; // 清浏览器记录后仓库路径自动回填，只需重填令牌
-    const APP_VER = "2026-07-28r"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-28s"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -1375,13 +1375,13 @@ function showBloom(species) {
     });
     // 切回页面时立即同步一次，体验更接近“实时”
     document.addEventListener("visibilitychange", ()=>{ if (!document.hidden && cloudReady) { loadAll(true).then(()=>refresh()).catch(()=>{}); } });
+    const _av = $("appVer"); if (_av) _av.textContent = "应用版本 "+APP_VER+"（两台手机需一致）";
     if (cloudReady) {
       updateCloudStatus("connecting");
       loadAll().then(()=>{ if(!MEM) MEM=bootstrapLocal(); startSyncPoll(); refresh(); }).catch(()=>{ if(!MEM) MEM=bootstrapLocal(); updateCloudStatus("error"); refresh(); });
       // 即便首次拉取失败，也要启动轮询，否则会“永不同步”
       if (!_pollTimer) startSyncPoll();
     }
-    const _av = $("appVer"); if (_av) _av.textContent = "应用版本 "+APP_VER+"（两台手机需一致）";
     else { MEM = bootstrapLocal(); updateCloudStatus("offline"); refresh(); showConfigHint(); }
     // PWA：注册 Service Worker，确保“添加到主屏幕”的图标始终拉取最新页面
     // （修复：主屏图标会长期缓存旧版 HTML，导致功能“回退/无反应”）
