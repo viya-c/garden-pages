@@ -210,6 +210,19 @@
     @keyframes conf { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(160px) rotate(360deg); opacity: 0; } }
     .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: rgba(63,74,63,.92); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 14px; z-index: 60; animation: toastIn .2s ease; max-width: 80%; text-align: center; }
     @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 10px);} to { opacity:1; transform: translate(-50%,0);} }
+    /* 今日三维度卡片 */
+    .dim-card { border: 1.5px solid #ffd9e0; background: linear-gradient(135deg,#fff6f8,#fffdf7); }
+    .dim-chips { display: flex; gap: 8px; }
+    .dim-chip { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; border-radius: 14px; border: 1.5px solid #f0c2cc; background: #fff; font-size: 14px; font-weight: 700; color: #b5485c; cursor: pointer; transition: all .15s ease; -webkit-tap-highlight-color: transparent; }
+    .dim-chip .dim-emoji { font-size: 24px; }
+    .dim-chip .dim-check { width: 18px; height: 18px; line-height: 18px; border-radius: 50%; background: #f0c2cc; color: #fff; font-size: 12px; }
+    .dim-chip.on { border-color: #e5484d; background: #ffe9ee; box-shadow: 0 3px 10px rgba(229,72,77,.18); }
+    .dim-chip.on .dim-check { background: #e5484d; }
+    .dim-chip.disabled { opacity: .5; pointer-events: none; }
+    .dim-done { margin-top: 10px; padding: 8px 10px; border-radius: 12px; background: #ffe9ee; color: #c2183b; font-size: 13px; font-weight: 700; text-align: center; }
+    .dim-hint { margin-top: 10px; color: #c98a98; font-size: 12px; text-align: center; }
+    /* 语音鼓励横幅 */
+    .dim-cheer { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); max-width: 86%; width: max-content; background: linear-gradient(135deg,#ff7a93,#ff9a76); color: #fff; padding: 14px 20px; border-radius: 18px; font-size: 15px; font-weight: 700; line-height: 1.5; text-align: center; box-shadow: 0 8px 24px rgba(255,122,147,.4); z-index: 70; animation: toastIn .25s ease; }
   </style>
 </head>
 <body>
@@ -390,6 +403,7 @@
     </div>
   </div>
   <div id="toast" class="toast hidden"></div>
+  <div id="dimCheer" class="dim-cheer hidden"></div>
 
   <script>
   (function () {
@@ -402,7 +416,25 @@
     // 多台手机通过 GitHub API 读写同一文件实现同步。只需：① 一个 GitHub 令牌(Token)；② 仓库路径(owner/repo)。
     const GH_PATH = "store.json";
     const DEFAULT_REPO = "viya-c/garden-data"; // 清浏览器记录后仓库路径自动回填，只需重填令牌
-    const APP_VER = "2026-07-28s"; // 版本号：改版后让两台手机核对是否同一版本
+    // 三维度（固定，不用妈妈设置）：态度 / 方法 / 努力，三样当天都做到即奖励一朵小红花并语音鼓励
+    const DIM_CAT_ID = "dim";
+    const DIM_TASK_IDS = ["dim_attitude", "dim_method", "dim_effort"];
+    const DIM_SPECIES = "xiaohonghua";
+    const DIM_DEFS = [
+      { id: "dim_attitude", name: "态度", emoji: "🙂" },
+      { id: "dim_method",   name: "方法", emoji: "💡" },
+      { id: "dim_effort",   name: "努力", emoji: "💪" },
+    ];
+    const DIM_CHEERS = [
+      "宝贝，你今天态度认真、方法聪明、还特别努力，三样都做到了，妈妈真为你骄傲！继续发光吧！",
+      "今天你态度好、方法对、努力坚持，像小树苗一样在使劲长大。妈妈看见啦，超爱你！",
+      "态度、方法、努力，你今天三朵小花都种好啦！你认真的样子，就是最闪亮的星星。",
+      "宝贝，认真的态度、聪明的办法、不懈的努力，今天你全都做到了。你是妈妈心里最温暖的光！",
+      "你今天又认真又聪明还肯努力，三维度全点亮！妈妈的骄傲藏都藏不住啦，继续加油！",
+      "态度端正、方法得当、努力不减，今天你全做到了。宝贝，你比你想象中更棒！"
+    ];
+    function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
+    const APP_VER = "2026-07-31t"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -598,6 +630,7 @@
 
     // ---------- 花朵 SVG 为每种花手绘插画（见 FLOWERS 各条目的 svg） ----------
         const FLOWERS = {
+    xiaohonghua: { name: "小红花", pinyin: "xiǎo hóng huā", lang: "态度 · 方法 · 努力", cheer: "你态度认真、方法聪明、努力坚持，三样今天都做到了，妈妈真为你骄傲！", color: "#e5484d", svg: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="小红花"><path d="M50 58 Q48 88 50 116" stroke="#4f9e4f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M50 96 C36 92 30 80 32 72 C45 76 50 86 50 92 Z" fill="#6cc06c"/><path d="M50 90 C64 86 70 76 68 68 C56 72 50 80 50 88 Z" fill="#6cc06c"/><circle cx="50" cy="30" r="14" fill="#e23b5a"/><circle cx="66" cy="38" r="14" fill="#e23b5a"/><circle cx="66" cy="54" r="14" fill="#e23b5a"/><circle cx="50" cy="62" r="14" fill="#e23b5a"/><circle cx="34" cy="54" r="14" fill="#e23b5a"/><circle cx="34" cy="38" r="14" fill="#e23b5a"/><circle cx="50" cy="46" r="11" fill="#ffd23f"/></svg>` },
     xiangrikui: { name: "向日葵", pinyin: "xiàng rì kuí", lang: "阳光、忠诚，默默守护", cheer: "你像小太阳一样温暖又努力，妈妈为你骄傲！", color: "#ffd23f", svg: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="向日葵"><path d="M50 60 Q47 90 50 116" stroke="#4f9e4f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M50 98 C34 94 27 81 28 72 C43 76 50 86 50 94 Z" fill="#6cc06c"/><path d="M50 90 C66 86 74 75 73 66 C59 70 50 79 50 87 Z" fill="#6cc06c"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(0.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(20.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(40.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(60.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(80.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(100.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(120.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(140.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(160.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(180.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(200.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(220.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(240.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(260.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(280.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(300.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(320.0 50 48)"/><ellipse cx="50" cy="48" rx="5" ry="18" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(340.0 50 48)"/><circle cx="50" cy="48" r="13" fill="#8a5a2b"/><circle cx="50" cy="48" r="13" fill="none" stroke="#00000022" stroke-width="1.5"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(0 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(30 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(60 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(90 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(120 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(150 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(180 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(210 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(240 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(270 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(300 50 48)"/><ellipse cx="50" cy="41" rx="1.3" ry="1.3" fill="#00000033" transform="rotate(330 50 48)"/></svg>` },
     meigui: { name: "玫瑰", pinyin: "méi guī", lang: "爱与勇气", cheer: "每一次坚持都了不起，继续勇敢向前！", color: "#e23b5a", svg: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="玫瑰"><path d="M50 60 Q47 90 50 116" stroke="#4f9e4f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M50 98 C34 94 27 81 28 72 C43 76 50 86 50 94 Z" fill="#6cc06c"/><path d="M50 90 C66 86 74 75 73 66 C59 70 50 79 50 87 Z" fill="#6cc06c"/><ellipse cx="50" cy="44" rx="16" ry="22" fill="#c9184a" stroke="#00000022" stroke-width="1" transform="rotate(0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(0.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(40.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(80.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(120.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(160.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(200.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(240.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(280.0 50 50)"/><ellipse cx="50" cy="48" rx="15" ry="20" fill="#e23b5a" stroke="#00000018" stroke-width="1" transform="rotate(320.0 50 50)"/><ellipse cx="50" cy="42" rx="10" ry="14" fill="#c9184a" stroke="#00000018" stroke-width="1" transform="rotate(25.7 50 50)"/><ellipse cx="50" cy="42" rx="10" ry="14" fill="#c9184a" stroke="#00000018" stroke-width="1" transform="rotate(77.1 50 50)"/><ellipse cx="50" cy="42" rx="10" ry="14" fill="#c9184a" stroke="#00000018" stroke-width="1" transform="rotate(128.6 50 50)"/><ellipse cx="50" cy="42" rx="10" ry="14" fill="#c9184a" stroke="#00000018" stroke-width="1" transform="rotate(180.0 50 50)"/><ellipse cx="50" cy="42" rx="10" ry="14" fill="#c9184a" stroke="#00000018" stroke-width="1" transform="rotate(231.4 50 50)"/><ellipse cx="50" cy="42" rx="10" ry="14" fill="#c9184a" stroke="#00000018" stroke-width="1" transform="rotate(282.9 50 50)"/><ellipse cx="50" cy="42" rx="10" ry="14" fill="#c9184a" stroke="#00000018" stroke-width="1" transform="rotate(334.3 50 50)"/><circle cx="50" cy="50" r="7" fill="#7d0d2c"/><circle cx="50" cy="50" r="7" fill="none" stroke="#00000022" stroke-width="1.5"/></svg>` },
     yujinxiang: { name: "郁金香", pinyin: "yù jīn xiāng", lang: "美好的祝福与胜利", cheer: "你认真的样子真美，收获属于你！", color: "#c77dff", svg: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="郁金香"><path d="M50 60 Q47 90 50 116" stroke="#4f9e4f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M50 98 C34 94 27 81 28 72 C43 76 50 86 50 94 Z" fill="#6cc06c"/><path d="M50 90 C66 86 74 75 73 66 C59 70 50 79 50 87 Z" fill="#6cc06c"/><path d="M50 60 C29.5 52 31.5 28 36.5 26 C41.5 28 43.5 52 50 60 Z" fill="#c77dff" stroke="#00000018" stroke-width="1"/><path d="M50 60 C38.5 52 40.5 28 45.5 26 C50.5 28 52.5 52 50 60 Z" fill="#a64bdd" stroke="#00000018" stroke-width="1"/><path d="M50 60 C47.5 52 49.5 28 54.5 26 C59.5 28 61.5 52 50 60 Z" fill="#c77dff" stroke="#00000018" stroke-width="1"/><path d="M50 60 C56.5 52 58.5 28 63.5 26 C68.5 28 70.5 52 50 60 Z" fill="#a64bdd" stroke="#00000018" stroke-width="1"/><path d="M34 34 Q50 42 66 34 Q50 30 34 34 Z" fill="#a64bdd" opacity="0.85"/></svg>` },
@@ -717,6 +750,10 @@
           {id:2,category_id:2,name:"单词朗读",emoji:"🗣️",scheduled_time:"10:00",duration:20,repeat_mode:"daily",repeat_days:"1,2,3,4,5,6,7",active:1,sort_order:1},
           {id:3,category_id:3,name:"拼读练习",emoji:"🔡",scheduled_time:"15:00",duration:15,repeat_mode:"daily",repeat_days:"1,2,3,4,5,6,7",active:1,sort_order:2},
           {id:4,category_id:4,name:"描红练字",emoji:"✍️",scheduled_time:"16:00",duration:20,repeat_mode:"daily",repeat_days:"1,2,3,4,5,6,7",active:1,sort_order:3},
+          // 三维度固定任务：active:0（不计入学科清单/统计），fixed:true（妈妈不可删除/编辑），仅由打卡板顶部专属卡片控制
+          {id:"dim_attitude",category_id:"dim",name:"态度",emoji:"🙂",scheduled_time:"00:00",duration:0,repeat_mode:"daily",repeat_days:"1,2,3,4,5,6,7",active:0,fixed:true,sort_order:0},
+          {id:"dim_method",category_id:"dim",name:"方法",emoji:"💡",scheduled_time:"00:00",duration:0,repeat_mode:"daily",repeat_days:"1,2,3,4,5,6,7",active:0,fixed:true,sort_order:1},
+          {id:"dim_effort",category_id:"dim",name:"努力",emoji:"💪",scheduled_time:"00:00",duration:0,repeat_mode:"daily",repeat_days:"1,2,3,4,5,6,7",active:0,fixed:true,sort_order:2},
         ],
         checkins:[], flowers:[], growth:{current_species:"",progress:0}, redemptions:[], seq:4, catSeq:4, flowerSeq:0,
       };
@@ -738,6 +775,13 @@
       (s.tasks||[]).forEach(t=>{ if(t){ if(t.id!=null) t.id = String(t.id); if(t.category_id!=null) t.category_id = String(t.category_id); } });
       (s.checkins||[]).forEach(c=>{ if(c){ if(c.id!=null) c.id = String(c.id); if(c.task_id!=null) c.task_id = String(c.task_id); } });
       (s.redemptions||[]).forEach(r=>{ if(r && r.id!=null) r.id = String(r.id); });
+      ensureSeedDims(s);
+      return s;
+    }
+    // 确保三个固定维度任务始终存在（老数据迁移）：补打卡板“今日三维度”所需
+    function ensureSeedDims(s){
+      if(!s || !s.tasks) return s;
+      DIM_DEFS.forEach((d, i)=>{ if(!s.tasks.some(t=>t.id===d.id)){ s.tasks.push({ id:d.id, category_id:DIM_CAT_ID, name:d.name, emoji:d.emoji, scheduled_time:"00:00", duration:0, repeat_mode:"daily", repeat_days:"1,2,3,4,5,6,7", active:0, fixed:true, sort_order:i }); } });
       return s;
     }
     function errText(e) {
@@ -765,7 +809,7 @@
         const familyChanged = !!remote.store && _cloudSig !== "" && remoteSig !== _cloudSig && (Date.now() - _localEditAt) > 15000;
         const base = MEM || readLocal() || bootstrapLocal();
         const merged = remote.store ? mergeStores(base, remote.store, _prev || settingsSnapshot(base)) : JSON.parse(JSON.stringify(base));
-        MEM = merged; if (remote.store) _prev = settingsSnapshot(remote.store); recomputeGrowth(MEM);
+        MEM = merged; ensureSeedDims(MEM); if (remote.store) _prev = settingsSnapshot(remote.store); recomputeGrowth(MEM);
         _cloudSig = remoteSig; // 以云端当前指纹为基线，避免重复提示
         try { localStorage.setItem(KEY, JSON.stringify(MEM)); } catch (e) {}
         updateCloudStatus("online");
@@ -880,7 +924,7 @@
     function computeStats() {
       const s = store(); const today = todayStr();
       const wd = new Date(today+"T00:00:00").getDay(); const wdIso = wd===0?7:wd;
-      const total = s.tasks.filter(t=>t.active && taskApplies(t, wdIso) && taskInRange(t, today)).length;
+      const total = s.tasks.filter(t=>t.active && !t.fixed && taskApplies(t, wdIso) && taskInRange(t, today)).length;
       const done = s.checkins.filter(c=>c.date===today && (c.status==="done_normal"||c.status==="done_late")).length;
       const trend=[]; for(let i=6;i>=0;i--){ const d=shiftDate(today,-i); const n=s.checkins.filter(c=>c.date===d && (c.status==="done_normal"||c.status==="done_late")).length; trend.push({date:d,flowers:n}); }
       return { today_total:total, done_today:done, completion: total?done/total:0, trend, rewards: computeState(today).rewards };
@@ -890,10 +934,19 @@
       recomputeGrowth(s);
     }
     function recomputeGrowth(s) {
-      const rows = (s.checkins||[]).filter(c=>c.status==="done_normal"||c.status==="done_late").slice().sort((a,b)=> a.checked_at.localeCompare(b.checked_at) || (String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0)));
+      const isDim = (c)=> DIM_TASK_IDS.indexOf(String(c.task_id)) >= 0;
+      // 学科打卡：每满 3 次开一朵花（不含三维度，三维度单独走小红花奖励）
+      const rows = (s.checkins||[]).filter(c=>(c.status==="done_normal"||c.status==="done_late") && !isDim(c)).slice().sort((a,b)=> a.checked_at.localeCompare(b.checked_at) || (String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0)));
       let cur="", prog=0, bloomed=[];
       // 每满 3 次打卡开一朵花；第 3 次打卡触发开花，开放时间取该次打卡的真实 checked_at（而非重算时的当前时间）
       rows.forEach(r=>{ if(cur===""){ cur=pick_species(r.id); prog=1; } else { prog++; } if(prog>=3){ bloomed.push({ id:"fl_"+r.id, species:cur, bloom_at:r.checked_at }); cur=""; prog=0; } });
+      // 三维度：当天态度/方法/努力全部完成 -> 一朵小红花（确定性、可同步）
+      const byDate = {};
+      (s.checkins||[]).filter(c=>isDim(c) && (c.status==="done_normal"||c.status==="done_late")).forEach(c=>{ (byDate[c.date]=byDate[c.date]||[]).push(c); });
+      Object.keys(byDate).forEach(date=>{
+        const all = DIM_TASK_IDS.every(id => byDate[date].some(c=>String(c.task_id)===id));
+        if(all){ const last = byDate[date].slice().sort((a,b)=>a.checked_at.localeCompare(b.checked_at))[byDate[date].length-1]; bloomed.push({ id:"dimfl_"+date, species:DIM_SPECIES, bloom_at:last.checked_at }); }
+      });
       s.flowers = bloomed;
       s.growth = { current_species:cur, progress:prog };
     }
@@ -944,6 +997,19 @@
       const s=store();
       const curCheckins=(s.checkins||[]).filter(c=>c.date===curDate);
       const checkinByTask=new Map(curCheckins.map(c=>[c.task_id,c]));
+      // ===== 今日三维度固定卡片（态度 / 方法 / 努力）=====
+      if(list){
+        const dimDone = dimAllDoneToday(s, curDate);
+        let chips="";
+        DIM_DEFS.forEach(d=>{
+          const on = !!curCheckins.find(c=>c.task_id===d.id);
+          chips += '<button class="dim-chip'+(on?" on":"")+'" data-dim="'+d.id+'"><span class="dim-emoji">'+d.emoji+'</span><span class="dim-name">'+d.name+'</span><span class="dim-check">'+(on?"✓":"")+'</span></button>';
+        });
+        const dimCard=document.createElement("div"); dimCard.className="card dim-card";
+        dimCard.innerHTML='<div class="card-title">🌟 今日三维度</div><div class="muted" style="margin-bottom:8px;">态度 · 方法 · 努力，三样都做到 → 奖励一朵小红花 🏵️ 并语音鼓励</div><div class="dim-chips">'+chips+'</div>'+(dimDone?'<div class="dim-done">🏵️ 今日三维度全达成，已奖励小红花！</div>':'<div class="dim-hint">点亮全部三个，立刻开花 🌸</div>');
+        list.appendChild(dimCard);
+        dimCard.querySelectorAll(".dim-chip").forEach(ch=>{ if(locked) ch.classList.add("disabled"); ch.addEventListener("click",()=>{ if(locked){ toast("🔒 该日期还未到，暂不能打卡"); return; } toggleDim(ch.dataset.dim); }); });
+      }
       const plannedIds=new Set(); STATE.categories.forEach(cat=>cat.tasks.forEach(t=>plannedIds.add(t.id)));
       let anyTask=false;
       STATE.categories.forEach(cat=>{
@@ -998,6 +1064,49 @@
     }
     function undoCheckin(t) {
       const s=store(); s.checkins=s.checkins.filter(c=>!(c.task_id===t.id && c.date===curDate)); save(s); rebuildGrowth(); toast("已撤销"); refresh();
+    }
+    // ---------- 三维度（态度 / 方法 / 努力）----------
+    function dimAllDoneToday(s, date){
+      return DIM_TASK_IDS.every(id => (s.checkins||[]).some(c=>String(c.task_id)===id && c.date===date && (c.status==="done_normal"||c.status==="done_late")));
+    }
+    function toggleDim(dimId){
+      const s=store();
+      const id = String(dimId)+"__"+curDate;
+      const existing = s.checkins.find(c=>c.id===id);
+      const wasAll = dimAllDoneToday(s, curDate);
+      if(existing){ s.checkins = s.checkins.filter(c=>c.id!==id); }
+      else { s.checkins.push({ id, task_id:String(dimId), date:curDate, status:"done_normal", checked_at:new Date().toISOString(), checked_by:role }); }
+      const nowAll = dimAllDoneToday(s, curDate);
+      save(s); rebuildGrowth();
+      if(!wasAll && nowAll){ playDimVoice(curDate); toast("🌟 三维度全达成，奖励小红花！"); }
+      else if(existing){ toast("已取消「"+dimName(dimId)+"」"); }
+      else { toast("棒！点亮「"+dimName(dimId)+"」✨"); }
+      refresh();
+    }
+    // 语音播放一句温暖有力的鼓励（中文女声）；同时屏幕显示文字兜底（无声音也能看到）
+    function playDimVoice(date){
+      const dayIdx = parseInt(String(date).slice(-2),10) || 0;
+      const text = DIM_CHEERS[dayIdx % DIM_CHEERS.length];
+      showDimCheer(text);
+      try {
+        const synth = window.speechSynthesis;
+        if(synth && typeof SpeechSynthesisUtterance !== "undefined"){
+          try { synth.cancel(); } catch(e){}
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = "zh-CN"; u.rate = 0.95; u.pitch = 1.05; u.volume = 1;
+          const vs = (synth.getVoices && synth.getVoices()) || [];
+          const zh = vs.find(v=>/zh|cmn|Chinese|中文|普通话|Han/i.test(v.lang||"") || /Chinese|中文|普通话/i.test(v.name||""));
+          if(zh) u.voice = zh;
+          synth.speak(u);
+        }
+      } catch(e){}
+    }
+    function showDimCheer(text){
+      const el = $("dimCheer"); if(!el) return;
+      el.textContent = "🔊 " + text;
+      el.classList.remove("hidden");
+      clearTimeout(el._t);
+      el._t = setTimeout(()=>{ el.classList.add("hidden"); }, 7000);
     }
     // 给其他任务打卡（计划外的额外打卡）：弹出全部启用任务，点选即对 curDate 打卡，归入对应科目下显示
     function openExtraCheckinPicker() {
@@ -1171,8 +1280,8 @@ function showBloom(species) {
     function renderTaskManage() {
       const s=store(); const box=$("taskManageList"); box.innerHTML="";
       const cats=s.categories.slice().sort((a,b)=>(a.sort_order-b.sort_order)||(String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0)));
-      const matched=s.tasks.filter(t=>cats.some(c=>c.id===t.category_id));
-      const orphan=s.tasks.filter(t=>!cats.some(c=>c.id===t.category_id));
+      const matched=s.tasks.filter(t=>cats.some(c=>c.id===t.category_id) && !t.fixed);
+      const orphan=s.tasks.filter(t=>!cats.some(c=>c.id===t.category_id) && !t.fixed);
       cats.forEach(c=>{
         const collapsed = _collapsedSet.has(String(c.id));
         const head=document.createElement("div");
