@@ -465,7 +465,7 @@
       ]
     };
     function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
-    const APP_VER = "2026-07-31x"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-08-01a"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -763,7 +763,7 @@
     dougulan: { name: "兜兰", pinyin: "dōu lán", lang: "奇特、珍稀", cheer: "小口袋，装着小惊喜！", color: "#ffd23f", svg: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="兜兰"><path d="M50 60 Q47 90 50 116" stroke="#4f9e4f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M50 98 C34 94 27 81 28 72 C43 76 50 86 50 94 Z" fill="#6cc06c"/><path d="M50 90 C66 86 74 75 73 66 C59 70 50 79 50 87 Z" fill="#6cc06c"/><path d="M50 50 C42 36 44 24 50 26 C56 24 58 36 50 50 Z" fill="#ff8fab" stroke="#00000012" stroke-width="0.8" transform="rotate(0 50 50)"/><path d="M50 50 C42 36 44 24 50 26 C56 24 58 36 50 50 Z" fill="#ffd23f" stroke="#00000012" stroke-width="0.8" transform="rotate(120 50 50)"/><path d="M50 50 C42 36 44 24 50 26 C56 24 58 36 50 50 Z" fill="#ff8fab" stroke="#00000012" stroke-width="0.8" transform="rotate(240 50 50)"/><path d="M50 52 C44 58 46 70 50 68 C54 70 56 58 50 52 Z" fill="#e8590c" stroke="#00000018" stroke-width="0.8"/><circle cx="50" cy="58" r="3" fill="#ffffff" opacity="0.8"/></svg>` },
     jiazilan: { name: "嘉德丽雅兰", pinyin: "jiā dé lì yà lán", lang: "魅惑", cheer: "华丽又神秘，你也是！", color: "#ff7aa2", svg: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="嘉德丽雅兰"><path d="M50 60 Q47 90 50 116" stroke="#4f9e4f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M50 98 C34 94 27 81 28 72 C43 76 50 86 50 94 Z" fill="#6cc06c"/><path d="M50 90 C66 86 74 75 73 66 C59 70 50 79 50 87 Z" fill="#6cc06c"/><path d="M50 50 C42 36 44 24 50 26 C56 24 58 36 50 50 Z" fill="#9d4edd" stroke="#00000012" stroke-width="0.8" transform="rotate(0 50 50)"/><path d="M50 50 C42 36 44 24 50 26 C56 24 58 36 50 50 Z" fill="#ff7aa2" stroke="#00000012" stroke-width="0.8" transform="rotate(120 50 50)"/><path d="M50 50 C42 36 44 24 50 26 C56 24 58 36 50 50 Z" fill="#9d4edd" stroke="#00000012" stroke-width="0.8" transform="rotate(240 50 50)"/><path d="M50 52 C44 58 46 70 50 68 C54 70 56 58 50 52 Z" fill="#ffd23f" stroke="#00000018" stroke-width="0.8"/><circle cx="50" cy="58" r="3" fill="#ffffff" opacity="0.8"/></svg>` },
   };
-    const SPECIES_KEYS = Object.keys(FLOWERS);
+    const SPECIES_KEYS = Object.keys(FLOWERS).filter(k => k !== DIM_SPECIES); // 小红花仅用于三维度奖励，绝不进入普通学科花池（修复"学科花随机变成小红花/加花种后整体平移"）
     function pick_species(id) { let h = 0; const str = String(id); for (let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) | 0; } return SPECIES_KEYS[Math.abs(h) % SPECIES_KEYS.length]; }
 
     // ---------- 本地存储 ----------
