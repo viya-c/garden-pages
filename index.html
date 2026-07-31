@@ -465,7 +465,7 @@
       ]
     };
     function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
-    const APP_VER = "2026-07-31w"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-31x"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -1106,17 +1106,23 @@
       refresh();
     }
     // 语音播放一句温暖有力的鼓励（中文女声）；同时屏幕显示文字兜底（无声音也能看到）
-    // 优先挑选更好听的中文语音（设备预装语音不同，按偏好择优；无法保证每台都有）
-    const DIM_VOICE_PREF = ["Ting-Ting","婷婷","Yu-Yu","玉玉","Sin-Ji","小燕","Liang","亮","Huihui","华健","Yaoyao","瑶瑶","安妮","Xiaoxiao","晓晓","Microsoft Huihui","Google 普通话","Google 粤语"];
+    // 优先挑选更好听的中文语音：按质量评分择优（增强/高质量 > 已知好听女声 > 默认美佳降权）
     let _voicesCache = [];
     function refreshVoices(){ try { const s=window.speechSynthesis; if(s && s.getVoices){ _voicesCache = s.getVoices()||[]; } } catch(e){} }
     function pickZhVoice(){
       if(!_voicesCache.length) refreshVoices();
       const zh = _voicesCache.filter(v=>/^zh|cmn|yue|Chinese|中文|普通话|粤语/i.test(v.lang||"") || /Chinese|中文|普通话|粤语/i.test(v.name||""));
       if(!zh.length) return null;
-      for(const name of DIM_VOICE_PREF){ const m = zh.find(v=> (v.name||"")===name || (v.voiceURI||"")===name ); if(m) return m; }
-      const soft = zh.find(v=>/Ting|婷|Yu|玉|Sin|燕|Hui|慧|Yao|瑶|Xiao|晓|An|安|Mei|美|female|女/i.test(v.name||""));
-      return soft || zh[0];
+      const nm = (v)=> ((v.name||"") + " " + (v.voiceURI||"")).toLowerCase();
+      function score(v){ let s=0; const n=nm(v);
+        if(/enhanced|premium|high|natural|neural|增强|高质量|高保真/.test(n)) s+=100;
+        if(/ting|婷|yu|玉|sin|燕|hui|慧|yao|瑶|xiao|晓|an|安|yaoyao/.test(n)) s+=40;
+        if(/female|女|她|samantha|karen|tessa/.test(n)) s+=20;
+        if(/mei|美|jia/.test(n)) s-=30;            // 默认美佳较生硬，降权
+        if(/liang|亮|male|男|daniel|rishi/.test(n)) s-=5;
+        return s;
+      }
+      return zh.slice().sort((a,b)=>score(b)-score(a))[0];
     }
     const _dimLastIdx = {};
     function pickDimTalk(dimId){
