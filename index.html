@@ -434,7 +434,7 @@
       "态度端正、方法得当、努力不减，今天你全做到了。宝贝，你比你想象中更棒！"
     ];
     function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
-    const APP_VER = "2026-07-31t"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-31u"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -940,12 +940,9 @@
       let cur="", prog=0, bloomed=[];
       // 每满 3 次打卡开一朵花；第 3 次打卡触发开花，开放时间取该次打卡的真实 checked_at（而非重算时的当前时间）
       rows.forEach(r=>{ if(cur===""){ cur=pick_species(r.id); prog=1; } else { prog++; } if(prog>=3){ bloomed.push({ id:"fl_"+r.id, species:cur, bloom_at:r.checked_at }); cur=""; prog=0; } });
-      // 三维度：当天态度/方法/努力全部完成 -> 一朵小红花（确定性、可同步）
-      const byDate = {};
-      (s.checkins||[]).filter(c=>isDim(c) && (c.status==="done_normal"||c.status==="done_late")).forEach(c=>{ (byDate[c.date]=byDate[c.date]||[]).push(c); });
-      Object.keys(byDate).forEach(date=>{
-        const all = DIM_TASK_IDS.every(id => byDate[date].some(c=>String(c.task_id)===id));
-        if(all){ const last = byDate[date].slice().sort((a,b)=>a.checked_at.localeCompare(b.checked_at))[byDate[date].length-1]; bloomed.push({ id:"dimfl_"+date, species:DIM_SPECIES, bloom_at:last.checked_at }); }
+      // 三维度：每个维度当天做到即奖励一朵小红花（确定性、可同步；取消该维度自动收回）
+      (s.checkins||[]).filter(c=>isDim(c) && (c.status==="done_normal"||c.status==="done_late")).forEach(c=>{
+        bloomed.push({ id:"dimfl_"+c.date+"_"+c.task_id, species:DIM_SPECIES, bloom_at:c.checked_at });
       });
       s.flowers = bloomed;
       s.growth = { current_species:cur, progress:prog };
@@ -999,14 +996,14 @@
       const checkinByTask=new Map(curCheckins.map(c=>[c.task_id,c]));
       // ===== 今日三维度固定卡片（态度 / 方法 / 努力）=====
       if(list){
-        const dimDone = dimAllDoneToday(s, curDate);
+        const doneCount = DIM_DEFS.filter(d=>!!curCheckins.find(c=>c.task_id===d.id)).length;
         let chips="";
         DIM_DEFS.forEach(d=>{
           const on = !!curCheckins.find(c=>c.task_id===d.id);
           chips += '<button class="dim-chip'+(on?" on":"")+'" data-dim="'+d.id+'"><span class="dim-emoji">'+d.emoji+'</span><span class="dim-name">'+d.name+'</span><span class="dim-check">'+(on?"✓":"")+'</span></button>';
         });
         const dimCard=document.createElement("div"); dimCard.className="card dim-card";
-        dimCard.innerHTML='<div class="card-title">🌟 今日三维度</div><div class="muted" style="margin-bottom:8px;">态度 · 方法 · 努力，三样都做到 → 奖励一朵小红花 🏵️ 并语音鼓励</div><div class="dim-chips">'+chips+'</div>'+(dimDone?'<div class="dim-done">🏵️ 今日三维度全达成，已奖励小红花！</div>':'<div class="dim-hint">点亮全部三个，立刻开花 🌸</div>');
+        dimCard.innerHTML='<div class="card-title">🌟 今日三维度</div><div class="muted" style="margin-bottom:8px;">态度 · 方法 · 努力，每做到一项就奖励一朵小红花 🏵️ 并语音鼓励</div><div class="dim-chips">'+chips+'</div>'+(doneCount>0?'<div class="dim-done">🌸 已点亮 '+doneCount+'/3 · 获得 '+doneCount+' 朵小红花 🏵️</div>':'<div class="dim-hint">每点亮一个就奖励一朵小红花 🌸</div>');
         list.appendChild(dimCard);
         dimCard.querySelectorAll(".dim-chip").forEach(ch=>{ if(locked) ch.classList.add("disabled"); ch.addEventListener("click",()=>{ if(locked){ toast("🔒 该日期还未到，暂不能打卡"); return; } toggleDim(ch.dataset.dim); }); });
       }
@@ -1073,20 +1070,15 @@
       const s=store();
       const id = String(dimId)+"__"+curDate;
       const existing = s.checkins.find(c=>c.id===id);
-      const wasAll = dimAllDoneToday(s, curDate);
-      if(existing){ s.checkins = s.checkins.filter(c=>c.id!==id); }
-      else { s.checkins.push({ id, task_id:String(dimId), date:curDate, status:"done_normal", checked_at:new Date().toISOString(), checked_by:role }); }
-      const nowAll = dimAllDoneToday(s, curDate);
-      save(s); rebuildGrowth();
-      if(!wasAll && nowAll){ playDimVoice(curDate); toast("🌟 三维度全达成，奖励小红花！"); }
-      else if(existing){ toast("已取消「"+dimName(dimId)+"」"); }
-      else { toast("棒！点亮「"+dimName(dimId)+"」✨"); }
+      if(existing){ s.checkins = s.checkins.filter(c=>c.id!==id); save(s); rebuildGrowth(); toast("已取消「"+dimName(dimId)+"」"); }
+      else { s.checkins.push({ id, task_id:String(dimId), date:curDate, status:"done_normal", checked_at:new Date().toISOString(), checked_by:role }); save(s); rebuildGrowth(); playDimVoice(curDate, dimId); toast("🌟 点亮「"+dimName(dimId)+"」，奖励一朵小红花！"); }
       refresh();
     }
     // 语音播放一句温暖有力的鼓励（中文女声）；同时屏幕显示文字兜底（无声音也能看到）
-    function playDimVoice(date){
+    function playDimVoice(date, dimId){
       const dayIdx = parseInt(String(date).slice(-2),10) || 0;
-      const text = DIM_CHEERS[dayIdx % DIM_CHEERS.length];
+      const di = Math.max(0, DIM_DEFS.findIndex(d=>d.id===dimId));
+      const text = DIM_CHEERS[(dayIdx + di) % DIM_CHEERS.length];
       showDimCheer(text);
       try {
         const synth = window.speechSynthesis;
