@@ -425,16 +425,47 @@
       { id: "dim_method",   name: "方法", emoji: "💡" },
       { id: "dim_effort",   name: "努力", emoji: "💪" },
     ];
-    const DIM_CHEERS = [
-      "宝贝，你今天态度认真、方法聪明、还特别努力，三样都做到了，妈妈真为你骄傲！继续发光吧！",
-      "今天你态度好、方法对、努力坚持，像小树苗一样在使劲长大。妈妈看见啦，超爱你！",
-      "态度、方法、努力，你今天三朵小花都种好啦！你认真的样子，就是最闪亮的星星。",
-      "宝贝，认真的态度、聪明的办法、不懈的努力，今天你全都做到了。你是妈妈心里最温暖的光！",
-      "你今天又认真又聪明还肯努力，三维度全点亮！妈妈的骄傲藏都藏不住啦，继续加油！",
-      "态度端正、方法得当、努力不减，今天你全做到了。宝贝，你比你想象中更棒！"
-    ];
+    // 每个维度一套专属鼓励语（各 10 句），点击时随机抽一句播放
+    const DIM_TALKS = {
+      dim_attitude: [
+        "宝贝，你今天态度特别认真，妈妈一眼就看到了你的用心！",
+        "你今天一脸认真的小模样，真让妈妈心里暖暖的。",
+        "态度端正的孩子最闪闪发光，你今天就是那颗小星星！",
+        "不管难不难，你都认认真真去对待，妈妈为你骄傲。",
+        "你今天积极向上的样子，比考满分还让妈妈开心。",
+        "认真的态度是你身上最棒的超能力，继续保持呀！",
+        "宝贝，你对待事情的那份踏实，妈妈都记在心里啦。",
+        "今天你乖巧又用心，整个家都因为你亮堂堂的。",
+        "你认真对待每一件小事的样子，就是长大的样子。",
+        "态度好，运气自然好，你今天真是好运小福娃！"
+      ],
+      dim_method: [
+        "宝贝，你今天方法用得巧，脑子转得真快！",
+        "会找方法的孩子最聪明，你今天就是小机灵鬼！",
+        "你今天没有死磕，而是换了个好办法，妈妈点赞！",
+        "方法对了事半功倍，你今天省力气还做得好，真棒！",
+        "你今天动脑筋想招儿的样子，特别有大人范儿。",
+        "用对方法，困难就变小了，你今天就是方法小能手！",
+        "宝贝，你解决问题的思路越来越清晰啦，继续！",
+        "今天你聪明地安排顺序，做事又快又稳，厉害！",
+        "会方法的孩子走得远，你今天又往前迈了一大步。",
+        "你今天那招小妙计，妈妈偷偷学走了，哈哈！"
+      ],
+      dim_effort: [
+        "宝贝，你今天努力的样子，比结果更让妈妈感动。",
+        "一点一点坚持，就是你今天最了不起的地方！",
+        "努力的小孩最可爱，你今天汗水都闪着光呢。",
+        "你不喊累、不放弃，妈妈看到你小小的倔强和大大的勇气。",
+        "今天你咬牙坚持的那股劲儿，以后会是你的底气。",
+        "努力不一定马上开花，但一定在悄悄长大，妈妈等你！",
+        "宝贝，你今天多坚持的那一会儿，就是明天的厉害。",
+        "不怕慢，就怕站，你今天一直在往前走，真棒！",
+        "你今天付出的每份努力，都变成身上小小的肌肉和大大本事。",
+        "努力的你，是妈妈心里最温暖、最有力量的光。"
+      ]
+    };
     function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
-    const APP_VER = "2026-07-31v"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-07-31w"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -1087,10 +1118,17 @@
       const soft = zh.find(v=>/Ting|婷|Yu|玉|Sin|燕|Hui|慧|Yao|瑶|Xiao|晓|An|安|Mei|美|female|女/i.test(v.name||""));
       return soft || zh[0];
     }
+    const _dimLastIdx = {};
+    function pickDimTalk(dimId){
+      const arr = (DIM_TALKS && DIM_TALKS[dimId]) || [];
+      if(!arr.length) return "";
+      let i = Math.floor(Math.random()*arr.length);
+      if(arr.length>1 && _dimLastIdx[dimId]===i) i = (i+1)%arr.length; // 避免连续重复同一句
+      _dimLastIdx[dimId] = i;
+      return arr[i];
+    }
     function playDimVoice(date, dimId){
-      const dayIdx = parseInt(String(date).slice(-2),10) || 0;
-      const di = Math.max(0, DIM_DEFS.findIndex(d=>d.id===dimId));
-      const text = DIM_CHEERS[(dayIdx + di) % DIM_CHEERS.length];
+      const text = pickDimTalk(dimId);
       showDimCheer(text);
       try {
         const synth = window.speechSynthesis;
