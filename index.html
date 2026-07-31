@@ -465,7 +465,7 @@
       ]
     };
     function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
-    const APP_VER = "2026-08-01a"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-08-01b"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -973,7 +973,7 @@
       rows.forEach(r=>{ if(cur===""){ cur=pick_species(r.id); prog=1; } else { prog++; } if(prog>=3){ bloomed.push({ id:"fl_"+r.id, species:cur, bloom_at:r.checked_at }); cur=""; prog=0; } });
       // 三维度：每个维度当天做到即奖励一朵小红花（确定性、可同步；取消该维度自动收回）
       (s.checkins||[]).filter(c=>isDim(c) && (c.status==="done_normal"||c.status==="done_late")).forEach(c=>{
-        bloomed.push({ id:"dimfl_"+c.date+"_"+c.task_id, species:DIM_SPECIES, bloom_at:c.checked_at });
+        bloomed.push({ id:"dimfl_"+c.date+"_"+c.task_id, species:DIM_SPECIES, bloom_at:c.checked_at, cheer:(c.cheer||"") });
       });
       s.flowers = bloomed;
       s.growth = { current_species:cur, progress:prog };
@@ -1102,7 +1102,7 @@
       const id = String(dimId)+"__"+curDate;
       const existing = s.checkins.find(c=>c.id===id);
       if(existing){ s.checkins = s.checkins.filter(c=>c.id!==id); save(s); rebuildGrowth(); toast("已取消「"+dimName(dimId)+"」"); }
-      else { s.checkins.push({ id, task_id:String(dimId), date:curDate, status:"done_normal", checked_at:new Date().toISOString(), checked_by:role }); save(s); rebuildGrowth(); playDimVoice(curDate, dimId); toast("🌟 点亮「"+dimName(dimId)+"」，奖励一朵小红花！"); }
+      else { const text = playDimVoice(curDate, dimId); s.checkins.push({ id, task_id:String(dimId), date:curDate, status:"done_normal", checked_at:new Date().toISOString(), checked_by:role, cheer:text }); save(s); rebuildGrowth(); toast("🌟 点亮「"+dimName(dimId)+"」，奖励一朵小红花！"); }
       refresh();
     }
     // 语音播放一句温暖有力的鼓励（中文女声）；同时屏幕显示文字兜底（无声音也能看到）
@@ -1133,12 +1133,10 @@
       _dimLastIdx[dimId] = i;
       return arr[i];
     }
-    function playDimVoice(date, dimId){
-      const text = pickDimTalk(dimId);
-      showDimCheer(text);
+    function speakText(text){
       try {
         const synth = window.speechSynthesis;
-        if(synth && typeof SpeechSynthesisUtterance !== "undefined"){
+        if(synth && typeof SpeechSynthesisUtterance !== "undefined" && text){
           try { synth.cancel(); } catch(e){}
           const u = new SpeechSynthesisUtterance(text);
           u.lang = "zh-CN"; u.rate = 0.9; u.pitch = 1.12; u.volume = 1; // 稍慢、稍高，更温柔
@@ -1146,6 +1144,12 @@
           synth.speak(u);
         }
       } catch(e){}
+    }
+    function playDimVoice(date, dimId){
+      const text = pickDimTalk(dimId);
+      showDimCheer(text);
+      speakText(text);
+      return text; // 返回选中的鼓励语，供打卡记录与小红花展示保持一致
     }
     // 预加载语音列表（iOS 语音异步加载，提前缓存并在就绪后刷新）
     try { const s=window.speechSynthesis; if(s){ refreshVoices(); if("onvoiceschanged" in s) s.onvoiceschanged = refreshVoices; } } catch(e){}
@@ -1254,9 +1258,22 @@ function showBloom(species) {
         const items=list.map(x=>'<span class="bt">'+esc(fmtBloom(x.bloom_at))+'</span>');
         timesHtml='<div class="bloom-times">🌸 开放时间：'+(list.length>1?'<br>'+items.join('<br>'):items.join('、'))+'</div>';
       }
+      // 每朵小红花展示它打卡时播放的那句鼓励语（与语音一致）；带🔊可重听同一句
+      const perBloomCheers = list.map(x => (x.cheer && String(x.cheer).trim()) ? x.cheer : "");
+      const hasPer = perBloomCheers.some(Boolean);
+      let cheerHtml;
+      if(hasPer){
+        cheerHtml = '<div class="bloom-cheers" style="margin:10px 0;">' + list.map(function(x,i){
+          const t = perBloomCheers[i] || f.cheer;
+          return '<div class="bloom-cheer-item" style="background:#fff5f6;border:1px solid #ffd7dd;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:14px;color:#c0392b;line-height:1.5;">“'+esc(t)+'” <button class="mini-play" data-i="'+i+'" style="border:none;background:#ffe3e8;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px;vertical-align:middle;">🔊</button></div>';
+        }).join('') + '</div>';
+      } else {
+        cheerHtml = '<div class="bloom-cheer">'+esc(f.cheer)+'</div>';
+      }
       const ov=$("bloomOverlay");
-      ov.innerHTML='<div class="bloom-card">'+f.svg+'<div class="bloom-title">'+esc(f.name)+' 开花啦！</div><div class="bloom-pinyin">'+esc(f.pinyin)+'</div><div class="bloom-lang">花语：<b>'+esc(f.lang)+'</b></div><div class="bloom-cheer">'+esc(f.cheer)+'</div>'+timesHtml+'<button class="btn-primary" id="bloomOk">太棒啦！</button></div>';
+      ov.innerHTML='<div class="bloom-card">'+f.svg+'<div class="bloom-title">'+esc(f.name)+' 开花啦！</div><div class="bloom-pinyin">'+esc(f.pinyin)+'</div><div class="bloom-lang">花语：<b>'+esc(f.lang)+'</b></div>'+cheerHtml+timesHtml+'<button class="btn-primary" id="bloomOk">太棒啦！</button></div>';
       ov.classList.remove("hidden"); spawnConfetti(ov);
+      ov.querySelectorAll(".mini-play").forEach(function(btn){ btn.addEventListener("click", function(){ const i=parseInt(btn.getAttribute("data-i"),10)||0; speakText(perBloomCheers[i] || f.cheer); }); });
       $("bloomOk").addEventListener("click",()=>ov.classList.add("hidden"));
     }
     function spawnConfetti(ov){ const em=["🎉","✨","🌸","💮","🌟"]; for(let i=0;i<14;i++){ const c=document.createElement("div"); c.className="confetti"; c.textContent=em[i%em.length]; c.style.left=(10+Math.random()*80)+"%"; c.style.top="10%"; c.style.animationDelay=(Math.random()*0.5)+"s"; ov.appendChild(c); } }
