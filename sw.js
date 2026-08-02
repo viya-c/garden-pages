@@ -4,7 +4,7 @@
 //       让【后续加载秒开】；同时后台静默拉取最新版写入缓存，下一次加载即生效。
 //       首次访问（缓存为空）走网络拿到最新版并写入缓存。跨域请求（GitHub API 等）不拦截。
 //       换版本时 CACHE 常量升号，旧缓存失效、新版首次即拉取，避免“回退/无反应”。
-const CACHE = "garden-shell-v6";
+const CACHE = "garden-shell-v7";
 self.addEventListener("install", function (e) { self.skipWaiting(); });
 self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", function (e) {
