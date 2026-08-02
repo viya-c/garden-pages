@@ -3,7 +3,7 @@
 // 避免 iOS 把旧版 HTML 长期缓存在主屏图标里导致功能“回退/无反应”。
 // 策略：同源的“页面外壳”请求（导航到首页/index.html）走【网络优先】，失败再回退缓存；
 //       跨域请求（GitHub API 等）与其它静态资源交给浏览器默认处理，不拦截。
-const CACHE = "garden-shell-v3";
+const CACHE = "garden-shell-v4";
 self.addEventListener("install", function (e) { self.skipWaiting(); });
 self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", function (e) {

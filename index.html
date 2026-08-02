@@ -131,6 +131,10 @@
     .flower-item .fname { font-size: 11px; font-weight: 700; margin-top: 1px; color: #4a5a4a; line-height: 1.15; }
     .flower-item .fpy { font-size: 10px; color: #9bb09b; margin-top: 1px; }
     .flower-item .fcount { display: inline-block; margin-top: 2px; background: var(--pink); color: #fff; font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 8px; }
+    .garden-pager { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 10px; }
+    .garden-pager .pg-btn { border: none; background: var(--pink); color: #fff; font-weight: 700; border-radius: 999px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+    .garden-pager .pg-btn:disabled { background: #e9e9e9; color: #b0b0b0; cursor: default; }
+    .garden-pager .pg-label { font-size: 13px; color: #7a8a7a; font-weight: 700; }
     .reward-hint { font-size: 13px; color: #7f947f; margin-top: 6px; }
     .point-big { font-size: 30px; font-weight: 800; color: #2a9d8f; }
     .redeem-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
@@ -282,6 +286,7 @@
         <div class="card-title">🌸 我的花园（已开花 <span id="gardenCount">0</span> 朵）</div>
         <div id="garden" class="garden"></div>
         <div id="gardenEmpty" class="muted">还没有开花，快去打卡种种子吧~</div>
+        <div id="gardenPager" class="garden-pager"></div>
       </div>
       <div class="card">
         <div class="card-title">⭐ 我的积分</div>
@@ -465,7 +470,7 @@
       ]
     };
     function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
-    const APP_VER = "2026-08-01b"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-08-02a"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -1214,15 +1219,41 @@
       if($("acctAvail")) $("acctAvail").textContent=_avail;
       const _ap=$("acctPending"); if(_ap){ _ap.classList.toggle("hidden", !_pend); if(_pend && $("acctPendingN")) $("acctPendingN").textContent=_pend; }
       $("rFpr").textContent=cfg.flowers_per_redemption; $("rPpr").textContent=cfg.points_per_redemption;
-      const garden=$("garden"); garden.innerHTML="";
-      if(!STATE.flowers.length){ $("gardenEmpty").classList.remove("hidden"); }
-      else {
-        $("gardenEmpty").classList.add("hidden");
-        const groups={}; STATE.flowers.forEach(f=>{ if(!FLOWERS[f.species]) return; groups[f.species]=(groups[f.species]||0)+1; }); Object.keys(groups).forEach(sp=>{ const info2=FLOWERS[sp]; const n=groups[sp]; const item=document.createElement("div"); item.className="flower-item"; item.innerHTML=info2.svg+'<div class="fname">'+esc(info2.name)+'</div>'+(n>1?'<div class="fcount">×'+n+'</div>':''); item.addEventListener("click",()=>showBloom(sp)); garden.appendChild(item); });
-      }
+      renderGarden();
       $("btnRedeem").disabled = r.flowers_available < cfg.flowers_per_redemption;
       $("btnRedeem").textContent = "🌸 用 "+cfg.flowers_per_redemption+" 朵花找妈妈换 "+cfg.points_per_redemption+" 分";
       $("pendingTip").classList.toggle("hidden", !STATE.pending_points.length);
+    }
+    // 花园翻页：按花种分组展示，每页固定数量，防止花越攒越多时页面过长
+    let gardenPage = 1;
+    const GARDEN_PAGE_SIZE = 12;
+    function renderGarden(){
+      const garden=$("garden"); if(!garden) return;
+      const pager=$("gardenPager"); if(pager) pager.innerHTML="";
+      garden.innerHTML="";
+      const flowers=(STATE&&STATE.flowers)||[];
+      if(!flowers.length){ if($("gardenEmpty")) $("gardenEmpty").classList.remove("hidden"); return; }
+      if($("gardenEmpty")) $("gardenEmpty").classList.add("hidden");
+      const groups={}; flowers.forEach(f=>{ if(!FLOWERS[f.species]) return; groups[f.species]=(groups[f.species]||0)+1; });
+      const species=Object.keys(groups);
+      const totalPages=Math.max(1, Math.ceil(species.length/GARDEN_PAGE_SIZE));
+      if(gardenPage>totalPages) gardenPage=totalPages;
+      if(gardenPage<1) gardenPage=1;
+      const start=(gardenPage-1)*GARDEN_PAGE_SIZE;
+      species.slice(start, start+GARDEN_PAGE_SIZE).forEach(sp=>{
+        const info=FLOWERS[sp]; const n=groups[sp];
+        const item=document.createElement("div"); item.className="flower-item";
+        item.innerHTML=info.svg+'<div class="fname">'+esc(info.name)+'</div>'+(n>1?'<div class="fcount">×'+n+'</div>':'');
+        item.addEventListener("click",()=>showBloom(sp)); garden.appendChild(item);
+      });
+      if(pager && totalPages>1){
+        const prev=document.createElement("button"); prev.className="pg-btn"; prev.textContent="‹ 上一页"; prev.disabled=gardenPage<=1;
+        prev.addEventListener("click",()=>{ if(gardenPage>1){ gardenPage--; renderGarden(); } });
+        const label=document.createElement("span"); label.className="pg-label"; label.textContent="第 "+gardenPage+" / "+totalPages+" 页";
+        const next=document.createElement("button"); next.className="pg-btn"; next.textContent="下一页 ›"; next.disabled=gardenPage>=totalPages;
+        next.addEventListener("click",()=>{ if(gardenPage<totalPages){ gardenPage++; renderGarden(); } });
+        pager.appendChild(prev); pager.appendChild(label); pager.appendChild(next);
+      }
     }
 
     // ---------- 开花庆祝 ----------
