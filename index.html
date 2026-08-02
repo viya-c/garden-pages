@@ -470,7 +470,7 @@
       ]
     };
     function dimName(id){ const d = DIM_DEFS.find(x => x.id === id); return d ? d.name : id; }
-    const APP_VER = "2026-08-02a"; // 版本号：改版后让两台手机核对是否同一版本
+    const APP_VER = "2026-08-02b"; // 版本号：改版后让两台手机核对是否同一版本
     function readConfig() {
       try {
         const c = JSON.parse(localStorage.getItem("gg_config") || "{}");
@@ -1194,6 +1194,11 @@
     }
 
     // ---------- 花园 ----------
+    // 单一定义：成长阶段插画 + 已开花计数 + 花朵账本 + 翻页花墙。
+    // 注意：此前曾误写成两个同名 renderGarden —— 后声明的翻页版覆盖了前者的成长阶段/计数逻辑，
+    // 导致“已开花 X 朵”永远停在 HTML 初始值 0（花墙正常、计数卡死）。此处合并为唯一实现。
+    let gardenPage = 1;
+    const GARDEN_PAGE_SIZE = 12;
     function renderGarden() {
       if(!STATE) return; const r=STATE.rewards, cfg=STATE.config, prog=r.current_progress;
       const sp=r.current_species||""; const color=colorOf(sp);
@@ -1219,16 +1224,12 @@
       if($("acctAvail")) $("acctAvail").textContent=_avail;
       const _ap=$("acctPending"); if(_ap){ _ap.classList.toggle("hidden", !_pend); if(_pend && $("acctPendingN")) $("acctPendingN").textContent=_pend; }
       $("rFpr").textContent=cfg.flowers_per_redemption; $("rPpr").textContent=cfg.points_per_redemption;
-      renderGarden();
       $("btnRedeem").disabled = r.flowers_available < cfg.flowers_per_redemption;
       $("btnRedeem").textContent = "🌸 用 "+cfg.flowers_per_redemption+" 朵花找妈妈换 "+cfg.points_per_redemption+" 分";
       $("pendingTip").classList.toggle("hidden", !STATE.pending_points.length);
-    }
-    // 花园翻页：按花种分组展示，每页固定数量，防止花越攒越多时页面过长
-    let gardenPage = 1;
-    const GARDEN_PAGE_SIZE = 12;
-    function renderGarden(){
-      const garden=$("garden"); if(!garden) return;
+      // 翻页花墙：按花种分组展示，每页固定数量，防止花越攒越多时页面过长
+      const garden=$("garden");
+      if(!garden) return;
       const pager=$("gardenPager"); if(pager) pager.innerHTML="";
       garden.innerHTML="";
       const flowers=(STATE&&STATE.flowers)||[];
@@ -1240,11 +1241,11 @@
       if(gardenPage>totalPages) gardenPage=totalPages;
       if(gardenPage<1) gardenPage=1;
       const start=(gardenPage-1)*GARDEN_PAGE_SIZE;
-      species.slice(start, start+GARDEN_PAGE_SIZE).forEach(sp=>{
-        const info=FLOWERS[sp]; const n=groups[sp];
+      species.slice(start, start+GARDEN_PAGE_SIZE).forEach(sp2=>{
+        const info=FLOWERS[sp2]; const n=groups[sp2];
         const item=document.createElement("div"); item.className="flower-item";
         item.innerHTML=info.svg+'<div class="fname">'+esc(info.name)+'</div>'+(n>1?'<div class="fcount">×'+n+'</div>':'');
-        item.addEventListener("click",()=>showBloom(sp)); garden.appendChild(item);
+        item.addEventListener("click",()=>showBloom(sp2)); garden.appendChild(item);
       });
       if(pager && totalPages>1){
         const prev=document.createElement("button"); prev.className="pg-btn"; prev.textContent="‹ 上一页"; prev.disabled=gardenPage<=1;
