@@ -1,9 +1,10 @@
 // 成长花园 Service Worker
-// 作用：让“添加到主屏幕”的图标（iOS 独立模式）始终加载最新的 index.html，
-// 避免 iOS 把旧版 HTML 长期缓存在主屏图标里导致功能“回退/无反应”。
-// 策略：同源的“页面外壳”请求（导航到首页/index.html）走【网络优先】，失败再回退缓存；
-//       跨域请求（GitHub API 等）与其它静态资源交给浏览器默认处理，不拦截。
-const CACHE = "garden-shell-v5";
+// 作用：让“添加到主屏幕”的图标（iOS 独立模式）加载更快、且始终能更新。
+// 策略（stale-while-revalidate）：同源“页面外壳”请求（导航到首页/index.html）有缓存立即返回，
+//       让【后续加载秒开】；同时后台静默拉取最新版写入缓存，下一次加载即生效。
+//       首次访问（缓存为空）走网络拿到最新版并写入缓存。跨域请求（GitHub API 等）不拦截。
+//       换版本时 CACHE 常量升号，旧缓存失效、新版首次即拉取，避免“回退/无反应”。
+const CACHE = "garden-shell-v6";
 self.addEventListener("install", function (e) { self.skipWaiting(); });
 self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", function (e) {
@@ -14,10 +15,15 @@ self.addEventListener("fetch", function (e) {
     (req.mode === "navigate" || url.pathname.endsWith("/index.html") || url.pathname.endsWith("/"));
   if (!isShell) return;
   e.respondWith(
-    fetch(req).then(function (res) {
-      const copy = res.clone();
-      caches.open(CACHE).then(function (c) { c.put(req, copy); }).catch(function () {});
-      return res;
-    }).catch(function () { return caches.match(req).then(function (r) { return r || fetch(req); }); })
+    caches.open(CACHE).then(function (cache) {
+      return cache.match(req).then(function (cached) {
+        const network = fetch(req).then(function (res) {
+          if (res && res.status === 200) cache.put(req, res.clone());
+          return res;
+        }).catch(function () { return cached; });
+        // 有缓存立即返回（首访后秒开），无缓存再走网络
+        return cached || network;
+      });
+    })
   );
 });
